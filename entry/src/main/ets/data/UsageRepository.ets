@@ -2,7 +2,7 @@
 import { relationalStore } from '@kit.ArkData';
 import { RdbHelper } from './RdbHelper';
 import { SettingsStore } from './SettingsStore';
-import type { UsageStore } from './UsageStore';
+import type { UsageStore, UsageDataStore } from './UsageStore';
 import type { UsageRecord, SyncState } from '../model/UsageRecord';
 import type { Totals, ModelStat, DailyStat, TrendPoint, SessionStat, RecordRow } from '../model/Stats';
 import { Constants } from '../common/constants/Constants';
@@ -41,7 +41,7 @@ const rowAsUsageRecord = (rs: relationalStore.ResultSet): UsageRecord => {
 };
 
 /** 账户 + 用量记录 + 同步状态的 RDB 实现，并承载全部聚合查询。 */
-export class UsageRepository implements UsageStore {
+export class UsageRepository implements UsageDataStore {
   // ---- 周期过滤（对齐 db.py _period_where） ----
   private static periodWhere(period: string): PeriodFilter {
     let clause = '';

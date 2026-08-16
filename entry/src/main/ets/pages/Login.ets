@@ -72,7 +72,12 @@ struct Login {
             return false;
           }
           const data = event.data;
-          const url = typeof data === 'string' ? data : data.url;
+          let url: string;
+          if (typeof data === 'string') {
+            url = data;
+          } else {
+            url = data.getRequestUrl();
+          }
           if (url.startsWith('https://opencode.ai')) {
             this.captureAndFinish(url);
           }

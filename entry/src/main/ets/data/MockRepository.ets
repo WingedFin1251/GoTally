@@ -1,5 +1,5 @@
 // entry/src/main/ets/data/MockRepository.ets
-import type { UsageStore } from './UsageStore';
+import type { UsageStore, UsageDataStore } from './UsageStore';
 import type { UsageRecord, SyncState } from '../model/UsageRecord';
 import type { Totals, ModelStat, DailyStat, TrendPoint, SessionStat, RecordRow } from '../model/Stats';
 import { Constants } from '../common/constants/Constants';
@@ -45,7 +45,7 @@ function seedRecords(): UsageRecord[] {
 }
 
 /** Mock 数据仓储：无账号时返回示例用量，便于调试 UI 与图表。 */
-export class MockRepository implements UsageStore {
+export class MockRepository implements UsageDataStore {
   private records: UsageRecord[] = seedRecords();
   private token: string = Constants.USE_MOCK_DATA ? 'auth=mock' : '';
   private syncState: SyncState = {
