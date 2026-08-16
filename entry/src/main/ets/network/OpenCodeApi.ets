@@ -296,7 +296,7 @@ export class OpenCodeApi {
           header['X-Server-Id'] = serverId;
         }
         if (referer !== '') {
-          header['Referer'] = `https://opencode.ai${referer}`;
+          header['Referer'] = referer.startsWith('http') ? referer : `https://opencode.ai${referer}`;
         }
         const resp = await req.request(url, {
           method: http.RequestMethod.GET,
