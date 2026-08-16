@@ -1,6 +1,7 @@
 // entry/src/ohosTest/ets/test/Repository.test.ets
 import { describe, beforeAll, it, expect } from '@ohos/hypium';
 import { common } from '@kit.AbilityKit';
+import { AbilityDelegatorRegistry } from '@kit.TestKit';
 import { AppContext } from '../../../main/ets/common/AppContext';
 import { RdbHelper } from '../../../main/ets/data/RdbHelper';
 import { UsageRepository } from '../../../main/ets/data/UsageRepository';
@@ -9,8 +10,9 @@ import type { UsageRecord } from '../../../main/ets/model/UsageRecord';
 export default function repositoryTest() {
   describe('UsageRepositoryTest', () => {
     beforeAll(() => {
-      // 设备测试环境注入 UIAbilityContext，供 RDB/Preferences 初始化使用
-      AppContext.context = getContext(this) as common.UIAbilityContext;
+      // 设备测试环境注入应用上下文，供 RDB/Preferences 初始化使用
+      const ctx = AbilityDelegatorRegistry.getAbilityDelegator().getAppContext();
+      AppContext.context = ctx as common.UIAbilityContext;
     });
     it('insertAndTotals', 0, async () => {
       const store = await RdbHelper.getStore();
@@ -18,7 +20,7 @@ export default function repositoryTest() {
       const repo = new UsageRepository();
       // 清空历史数据，保证测试可重复执行（RDB 文件在设备上持久化）
       await repo.clearAccount();
-      const now = '2026-08-16T10:00:00.000Z';
+      const now = new Date().toISOString();
       const rec: UsageRecord = {
         usgId: 'usg_test_1', createdAt: now, model: 'gpt-4o', provider: 'openai',
         inputTokens: 100, outputTokens: 50, reasoningTokens: 10,
