@@ -95,7 +95,7 @@ struct Index {
   @Builder
   WelcomePage() {
     Column({ space: 16 }) {
-      Text('GoGauge')
+      Text('GoTally')
         .fontSize(40)
         .fontWeight(FontWeight.Bold)
       Text($r('app.string.welcome_desc'))

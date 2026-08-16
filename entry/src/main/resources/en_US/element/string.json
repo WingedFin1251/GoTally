@@ -2,7 +2,7 @@
   "string": [
     { "name": "module_desc", "value": "OpenCode Go Usage Panel" },
     { "name": "EntryAbility_desc", "value": "OpenCode Go Usage Panel" },
-    { "name": "EntryAbility_label", "value": "GoGauge" },
+    { "name": "EntryAbility_label", "value": "GoTally" },
     { "name": "tab_home", "value": "Home" },
     { "name": "tab_stats", "value": "Stats" },
     { "name": "tab_records", "value": "Records" },
@@ -127,7 +127,7 @@
     { "name": "about_links", "value": "Links" },
     { "name": "about_thanks", "value": "Thanks" },
     { "name": "thanks_text", "value": "Data provided by" },
-    { "name": "page_foot", "value": "GoGauge · Data stays local · Powered by OpenCode" },
+    { "name": "page_foot", "value": "GoTally · Data stays local · Powered by OpenCode" },
     { "name": "welcome_desc", "value": "Local-first OpenCode Go usage dashboard — quota windows, token breakdown, model ranking, usage records, all at a glance." },
     { "name": "welcome_feat_1", "value": "Real-time quota monitoring (5h / weekly / monthly)" },
     { "name": "welcome_feat_2", "value": "Full token statistics and 24-hour trend" },

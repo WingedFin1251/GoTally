@@ -46,7 +46,7 @@ struct Login {
   build() {
     Column() {
       Row() {
-        Text('GoGauge')
+        Text('GoTally')
           .fontSize(20)
           .fontWeight(FontWeight.Bold)
         Blank()

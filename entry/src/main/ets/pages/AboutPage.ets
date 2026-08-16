@@ -18,7 +18,7 @@ export struct AboutPage {
               .height(72)
               .borderRadius(18)
               .objectFit(ImageFit.Cover)
-            Text('GoGauge')
+            Text('GoTally')
               .fontSize(22)
               .fontWeight(FontWeight.Bold)
               .fontColor($r('app.color.text_primary'))
