@@ -2,6 +2,7 @@
 import { router } from '@kit.ArkUI';
 import { display } from '@kit.ArkUI';
 import { DataProvider } from '../data/DataProvider';
+import { DashboardPage } from './DashboardPage';
 
 @Entry
 @Component
@@ -146,7 +147,7 @@ struct Index {
   MainArea() {
     Column() {
       if (this.currentTab === 0) {
-        this.TabContentPlaceholder('首页占位')
+        DashboardPage()
       } else if (this.currentTab === 1) {
         this.TabContentPlaceholder('统计占位')
       } else if (this.currentTab === 2) {

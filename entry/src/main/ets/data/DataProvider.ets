@@ -6,6 +6,7 @@ import { MockRepository } from './MockRepository';
 import type { UsageFetcher } from '../network/UsageFetcher';
 import { OpenCodeApi } from '../network/OpenCodeApi';
 import type { UsageRecord } from '../model/UsageRecord';
+import type { UsageAggregator } from '../model/Stats';
 import { SyncManager } from '../network/SyncManager';
 import { SettingsStore } from './SettingsStore';
 
@@ -27,6 +28,10 @@ export class DataProvider {
       DataProvider.store = Constants.USE_MOCK_DATA ? new MockRepository() : new UsageRepository();
     }
     return DataProvider.store;
+  }
+
+  static getAggregator(): UsageAggregator {
+    return DataProvider.getStore() as unknown as UsageAggregator;
   }
 
   static getFetcher(): UsageFetcher {
