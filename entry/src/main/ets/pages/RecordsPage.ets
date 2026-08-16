@@ -244,7 +244,7 @@ export struct RecordsPage {
       }
       .width('100%')
       .padding({ left: 12, right: 12, top: 12 + this.statusBarHeight, bottom: 10 })
-      .backgroundBlurStyle(BlurStyle.COMPONENT_REGULAR)
+      .backgroundBlurStyle(BlurStyle.Regular)
     }
     .width('100%')
     .height('100%')
