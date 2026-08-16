@@ -77,6 +77,7 @@ export interface RecordRow {
 /** 聚合查询的最小接口（UsageRepository 与 MockRepository 均实现）。 */
 export interface UsageAggregator {
   totals(period: string): Promise<Totals>;
+  modelStats(period: string): Promise<ModelStat[]>;
   todayTrend(): Promise<TrendPoint[]>;
   dailyStats(days: number): Promise<DailyStat[]>;
 }

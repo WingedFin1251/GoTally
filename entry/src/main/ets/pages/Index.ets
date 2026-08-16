@@ -3,6 +3,7 @@ import { router } from '@kit.ArkUI';
 import { display } from '@kit.ArkUI';
 import { DataProvider } from '../data/DataProvider';
 import { DashboardPage } from './DashboardPage';
+import { StatsPage } from './StatsPage';
 
 @Entry
 @Component
@@ -149,7 +150,7 @@ struct Index {
       if (this.currentTab === 0) {
         DashboardPage()
       } else if (this.currentTab === 1) {
-        this.TabContentPlaceholder('统计占位')
+        StatsPage()
       } else if (this.currentTab === 2) {
         this.TabContentPlaceholder('记录占位')
       } else if (this.currentTab === 3) {
