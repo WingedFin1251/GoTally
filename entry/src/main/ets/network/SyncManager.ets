@@ -23,12 +23,18 @@ export class SyncManager {
   private busy = false;
   private timer: number | null = null;
   private intervalProvider: () => Promise<number>;
+  private resolveWorkspace: ((hint: string, token: string) => Promise<string>) | null;
   onProgress: (p: SyncProgress) => void = () => {};
 
-  constructor(store: UsageStore, fetcher: UsageFetcher, intervalProvider?: () => Promise<number>) {
+  constructor(
+    store: UsageStore,
+    fetcher: UsageFetcher,
+    intervalProvider?: () => Promise<number>,
+    resolveWorkspace?: (hint: string, token: string) => Promise<string>) {
     this.store = store;
     this.fetcher = fetcher;
     this.intervalProvider = intervalProvider !== undefined ? intervalProvider : async (): Promise<number> => 300;
+    this.resolveWorkspace = resolveWorkspace !== undefined ? resolveWorkspace : null;
   }
 
   getProgress(): SyncProgress {
@@ -42,7 +48,7 @@ export class SyncManager {
     this.onProgress(this.getProgress());
   }
 
-  async sync(mode: 'incremental' | 'full'): Promise<{ ok: boolean; error?: string; inserted?: number }> {
+  async sync(mode: 'incremental' | 'full'): Promise<{ ok: boolean; error?: string; inserted?: number; partial?: boolean; failedPages?: number }> {
     const token = await this.store.getToken();
     if (token.trim() === '') {
       return { ok: false, error: '未登录' };
@@ -57,10 +63,23 @@ export class SyncManager {
     this.setPhase('usage', '');
 
     try {
-      const workspaceId = await this.store.getWorkspaceHint();
+      let workspaceId = await this.store.getWorkspaceHint();
+      if (this.resolveWorkspace !== null && !workspaceId.startsWith('wrk_')) {
+        try {
+          workspaceId = await this.resolveWorkspace(workspaceId, token);
+          await this.store.saveResolvedWorkspace(workspaceId);
+        } catch (e) {
+          const msg = e instanceof Error ? e.message : String(e);
+          await this.store.updateSyncState('error', msg, 0);
+          this.setPhase('error', msg);
+          this.busy = false;
+          return { ok: false, error: msg };
+        }
+      }
       const windowDays = await this.store.getWindowDays();
       const maxPages = mode === 'full' ? Constants.MAX_FULL_PAGES : Constants.INCREMENTAL_PAGES;
       let totalInserted = 0;
+      let failedPages = 0;
       let page = 0;
       let emptyBatches = 0;
 
@@ -84,6 +103,7 @@ export class SyncManager {
           const result = results[i];
           if (result.error !== undefined) {
             batchFailed += 1;
+            failedPages += 1;
             continue;
           }
           const recs = result.records;
@@ -127,6 +147,13 @@ export class SyncManager {
 
       if (windowDays !== null && windowDays > 0) {
         await this.store.pruneOldRecords(windowDays);
+      }
+
+      if (failedPages > 0) {
+        await this.store.updateSyncState('partial', '部分页拉取失败 (数据可能不完整)', totalInserted);
+        this.setPhase('done', '部分页拉取失败');
+        this.busy = false;
+        return { ok: true, partial: true, failedPages: failedPages, inserted: totalInserted };
       }
 
       await this.store.updateSyncState('ok', '', totalInserted);

@@ -46,7 +46,8 @@ export class DataProvider {
       DataProvider.sync = new SyncManager(
         DataProvider.getStore(),
         DataProvider.getFetcher(),
-        async (): Promise<number> => SettingsStore.getSyncIntervalSec());
+        async (): Promise<number> => SettingsStore.getSyncIntervalSec(),
+        (hint: string, token: string): Promise<string> => OpenCodeApi.resolveWorkspaceId(hint, token));
     }
     return DataProvider.sync;
   }
