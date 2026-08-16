@@ -161,6 +161,7 @@ export class OpenCodeApi {
       if (created === null) {
         continue;
       }
+      const costRaw = parseNumField(body, 'cost');
       records.push({
         usgId: anchor.id,
         createdAt: created[1],
@@ -172,8 +173,8 @@ export class OpenCodeApi {
         cacheReadTokens: parseNumField(body, 'cacheReadTokens'),
         cacheWrite5mTokens: parseNumField(body, 'cacheWrite5mTokens'),
         cacheWrite1hTokens: parseNumField(body, 'cacheWrite1hTokens'),
-        costRaw: parseNumField(body, 'cost'),
-        costUsd: parseNumField(body, 'cost') / 100000000,
+        costRaw: costRaw,
+        costUsd: costRaw / 100000000,
         keyId: parseStrField(body, 'keyID'),
         sessionId: parseStrField(body, 'sessionID'),
         plan: plans.get(anchor.id) ?? '',
@@ -256,8 +257,8 @@ export class OpenCodeApi {
   }
 
   static async fetchUsdCny(): Promise<number> {
+    const req = http.createHttp();
     try {
-      const req = http.createHttp();
       const resp = await req.request(Constants.EXCHANGE_URL, {
         method: http.RequestMethod.GET,
         header: { 'Accept': 'application/json' },
@@ -273,6 +274,7 @@ export class OpenCodeApi {
       const cny = Number(rates['CNY'] ?? 0);
       return cny > 0 ? cny : Constants.DEFAULT_USD_CNY;
     } catch (e) {
+      req.destroy();
       return Constants.DEFAULT_USD_CNY;
     }
   }
@@ -283,8 +285,8 @@ export class OpenCodeApi {
     }
     let lastErr: Error = new Error('未知错误');
     for (let attempt = 0; attempt < Constants.RETRY_BACKOFF_MS.length; attempt++) {
+      const req = http.createHttp();
       try {
-        const req = http.createHttp();
         const header: Record<string, string> = {
           'Cookie': cookie,
           'X-Server-Instance': `server-fn:${Date.now()}`,
@@ -317,6 +319,7 @@ export class OpenCodeApi {
         }
         return resp.result as string;
       } catch (e) {
+        req.destroy();
         lastErr = e instanceof Error ? e : new Error(String(e));
         if (lastErr.message.includes('认证失败') || lastErr.message.includes('HTTP 404')) {
           throw lastErr;
