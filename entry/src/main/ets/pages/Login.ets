@@ -19,7 +19,7 @@ struct Login {
     if (this.done) {
       return;
     }
-    const cookies = webview.WebCookieManager.getCookieSync(Constants.LOGIN_COOKIE_DOMAIN);
+    const cookies = webview.WebCookieManager.fetchCookieSync(Constants.LOGIN_COOKIE_DOMAIN);
     if (cookies === null || cookies === '') {
       return;
     }
