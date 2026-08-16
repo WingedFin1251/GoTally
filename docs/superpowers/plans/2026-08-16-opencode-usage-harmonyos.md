@@ -815,7 +815,7 @@ export interface RecordRow {
 /** 千分位缩写：999 / 1.5k / 2.5M。 */
 export function formatTokens(n: number): string {
   if (n >= 1000000) {
-    return `${(n / 1000000).toFixed(2)}M`;
+    return `${parseFloat((n / 1000000).toFixed(2))}M`;
   }
   if (n >= 1000) {
     return `${(n / 1000).toFixed(1)}k`;
@@ -847,7 +847,6 @@ export function formatCount(n: number): string {
 
 ```typescript
 // entry/src/main/ets/common/utils/TimeUtil.ets
-import { formatTokens } from './Formatter';
 
 /** 解析 ISO 字符串（含 Z 结尾）为毫秒时间戳。 */
 export function parseIso(iso: string): number {
@@ -926,10 +925,6 @@ export function formatDurationShort(totalSec: number): string {
   }
   return `${s}s`;
 }
-
-/** 依赖声明占位：保证 Formatter 在依赖图中被引用（避免未使用告警时仍被摇树）。 */
-const _unused = formatTokens;
-void _unused;
 ```
 
 - [ ] **Step 6: 改写 `entry/src/test/List.test.ets` 注册测试**
@@ -994,7 +989,7 @@ export default function repositoryTest() {
       const store = await RdbHelper.getStore();
       expect(store).not().assertNull();
       const repo = new UsageRepository();
-      const now = '2026-08-16T10:00:00.000Z';
+      const now = new Date().toISOString();
       const rec: UsageRecord = {
         usgId: 'usg_test_1', createdAt: now, model: 'gpt-4o', provider: 'openai',
         inputTokens: 100, outputTokens: 50, reasoningTokens: 10,
@@ -1027,7 +1022,8 @@ import { relationalStore } from '@kit.ArkData';
 import { AppContext } from '../common/AppContext';
 import { Constants } from '../common/constants/Constants';
 
-const SQL_CREATE: string =
+// RDB executeSql 一次只执行一条语句，schema 拆成数组逐条执行
+const SCHEMA_STATEMENTS: string[] = [
   `CREATE TABLE IF NOT EXISTS usage_records (
      usg_id TEXT PRIMARY KEY,
      created_at TEXT NOT NULL,
@@ -1045,9 +1041,9 @@ const SQL_CREATE: string =
      session_id TEXT,
      plan TEXT,
      synced_at TEXT NOT NULL
-   );
-   CREATE INDEX IF NOT EXISTS idx_usage_time ON usage_records(created_at DESC);
-   CREATE TABLE IF NOT EXISTS usage_sync_state (
+   );`,
+  `CREATE INDEX IF NOT EXISTS idx_usage_time ON usage_records(created_at DESC);`,
+  `CREATE TABLE IF NOT EXISTS usage_sync_state (
      id INTEGER PRIMARY KEY CHECK (id = 1),
      last_sync_at TEXT,
      last_sync_status TEXT,
@@ -1057,8 +1053,8 @@ const SQL_CREATE: string =
      total_records INTEGER NOT NULL DEFAULT 0,
      oldest_record_at TEXT,
      newest_record_at TEXT
-   );
-   CREATE TABLE IF NOT EXISTS account (
+   );`,
+  `CREATE TABLE IF NOT EXISTS account (
      id INTEGER PRIMARY KEY CHECK (id = 1),
      name TEXT NOT NULL DEFAULT 'Default',
      workspace_id TEXT NOT NULL DEFAULT 'Default',
@@ -1066,7 +1062,8 @@ const SQL_CREATE: string =
      token TEXT NOT NULL DEFAULT '',
      created_at TEXT NOT NULL,
      updated_at TEXT NOT NULL
-   );`;
+   );`,
+];
 
 /** RDB 单例：建库建表，初始化单行表。 */
 export class RdbHelper {
@@ -1082,7 +1079,9 @@ export class RdbHelper {
       securityLevel: relationalStore.SecurityLevel.S1,
     };
     const store = await relationalStore.getRdbStore(ctx, config);
-    await store.executeSql(SQL_CREATE);
+    for (const stmt of SCHEMA_STATEMENTS) {
+      await store.executeSql(stmt);
+    }
     // 初始化单行：account / usage_sync_state
     const acct = await store.querySql('SELECT id FROM account WHERE id = 1');
     let acctExists = false;
@@ -1322,10 +1321,9 @@ export class UsageRepository implements UsageStore {
       return 0;
     }
     const store = await RdbHelper.getStore();
-    const rs = await store.querySql(
+    await store.executeSql(
       `DELETE FROM usage_records WHERE datetime(created_at) < datetime('now', ?)`,
       [`-${windowDays} days`]);
-    rs.close();
     await this.refreshSyncTotals();
     return 0; // RDB 不直接暴露删除行数，返回 0 即可（调用方不依赖精确值）
   }
@@ -1794,6 +1792,7 @@ export interface UsageStore {
   getWindowDays(): Promise<number | null>;
   updateSyncState(status: string, error: string, inserted: number): Promise<void>;
   getSyncState(): Promise<SyncState>;
+  clearAccount(): Promise<void>;
 }
 ```
 
@@ -1932,9 +1931,9 @@ const QUOTA_PATTERNS: Array<{ label: string; pctFirst: RegExp; resetFirst: RegEx
 ];
 
 const WORKSPACE_ID_RE: RegExp = /wrk_[A-Za-z0-9]+/;
-const WORKSPACE_ENTRY_RE: RegExp = /id\s*:\s*"(wrk_[^"]+)"[^{}]*?name\s*:\s*"([^"]*)"/;
-const RECORD_ANCHOR_RE: RegExp = /id:\s*"(usg_[^"]+)"/;
-const PLAN_RE: RegExp = /id:\s*"(usg_[^"]+)"[^}]*?enrichment:\$R\[\d+\]=\{plan:"([^"]+)"\}/;
+const WORKSPACE_ENTRY_RE: RegExp = /id\s*:\s*"(wrk_[^"]+)"[^{}]*?name\s*:\s*"([^"]*)"/g;
+const RECORD_ANCHOR_RE: RegExp = /id:\s*"(usg_[^"]+)"/g;
+const PLAN_RE: RegExp = /id:\s*"(usg_[^"]+)"[^}]*?enrichment:\$R\[\d+\]=\{plan:"([^"]+)"\}/g;
 const CREATED_RE: RegExp = /timeCreated:\s*\$R\[\d+\]\s*=\s*new Date\("([^"]+)"\)/;
 
 function clampPercent(v: number): number {
@@ -2044,7 +2043,7 @@ export class OpenCodeApi {
         seen.add(id);
         refs.push({ id: id, name: name });
       }
-      m = WORKSPACE_ENTRY_RE.exec(text, m.index + 1);
+      m = WORKSPACE_ENTRY_RE.exec(text);
     }
     return refs;
   }
@@ -2054,13 +2053,13 @@ export class OpenCodeApi {
     let pm = PLAN_RE.exec(text);
     while (pm !== null) {
       plans.set(pm[1], pm[2]);
-      pm = PLAN_RE.exec(text, pm.index + 1);
+      pm = PLAN_RE.exec(text);
     }
     const anchors: Array<{ id: string; start: number }> = [];
     let am = RECORD_ANCHOR_RE.exec(text);
     while (am !== null) {
       anchors.push({ id: am[1], start: am.index });
-      am = RECORD_ANCHOR_RE.exec(text, am.index + 1);
+      am = RECORD_ANCHOR_RE.exec(text);
     }
     const records: UsageRecord[] = [];
     for (let i = 0; i < anchors.length; i++) {
@@ -2206,7 +2205,7 @@ export class OpenCodeApi {
           header['X-Server-Id'] = serverId;
         }
         if (referer !== '') {
-          header['Referer'] = `https://opencode.ai${referer}`;
+          header['Referer'] = referer.startsWith('http') ? referer : `https://opencode.ai${referer}`;
         }
         const resp = await req.request(url, {
           method: http.RequestMethod.GET,
@@ -2266,7 +2265,7 @@ export default function testsuite() {
 }
 ```
 
-DevEco Studio：运行 `List.test`。预期：新增 5 个用例全部通过（3 个解析 + cookie/workspace 各 1）。
+DevEco Studio：运行 `List.test`。预期：新增 4 个用例全部通过（配额解析/用量解析/cookie 头/工作区 ID 各 1）。
 
 - [ ] **Step 5: Commit（非 git 仓库则跳过）**
 
@@ -2289,7 +2288,7 @@ git commit -m "feat: opencode api client with parsers and tests"
 - Produces:
   - `interface UsageFetcher { fetchUsagePage(workspaceId: string, page: number, keyId?: string): Promise<UsageRecord[]> }`
   - `interface SyncProgress { running: boolean; mode: string; page: number; inserted: number; phase: string; message: string }`
-  - `class SyncManager { static instance: SyncManager; setStore(store: UsageStore): void; setFetcher(fetcher: UsageFetcher): void; onProgress: (p: SyncProgress) => void; async sync(mode: 'incremental'|'full'): Promise<{ok:boolean; error?:string; inserted?:number}>; getProgress(): SyncProgress; async startAutoSyncLoop(): Promise<void>; stopAutoSync(): void }`
+  - `class SyncManager { constructor(store: UsageStore, fetcher: UsageFetcher, intervalProvider?: () => Promise<number>); onProgress: (p: SyncProgress) => void; async sync(mode: 'incremental'|'full'): Promise<{ok:boolean; error?:string; inserted?:number}>; getProgress(): SyncProgress; async startAutoSyncLoop(): Promise<void>; stopAutoSync(): void }`
 
 - [ ] **Step 1: 写失败测试（状态机，注入内存 store + fake fetcher）**
 
@@ -2337,6 +2336,7 @@ class FakeStore implements UsageStore {
     this.syncState.lastSyncError = error;
   }
   async getSyncState(): Promise<SyncState> { return this.syncState; }
+  async clearAccount(): Promise<void> { this.records = []; }
 }
 
 export default function syncManagerTest() {
@@ -2402,6 +2402,7 @@ export interface UsageFetcher {
 import { Constants } from '../common/constants/Constants';
 import type { UsageStore } from '../data/UsageStore';
 import type { UsageFetcher } from './UsageFetcher';
+import type { UsageRecord } from '../model/UsageRecord';
 
 export interface SyncProgress {
   running: boolean;
@@ -2421,11 +2422,13 @@ export class SyncManager {
   private progress: SyncProgress = { ...IDLE_PROGRESS };
   private busy = false;
   private timer: number | null = null;
+  private intervalProvider: () => Promise<number>;
   onProgress: (p: SyncProgress) => void = () => {};
 
-  constructor(store: UsageStore, fetcher: UsageFetcher) {
+  constructor(store: UsageStore, fetcher: UsageFetcher, intervalProvider?: () => Promise<number>) {
     this.store = store;
     this.fetcher = fetcher;
+    this.intervalProvider = intervalProvider !== undefined ? intervalProvider : async (): Promise<number> => 300;
   }
 
   getProgress(): SyncProgress {
@@ -2550,7 +2553,7 @@ export class SyncManager {
 
   async startAutoSyncLoop(): Promise<void> {
     this.stopAutoSync();
-    const intervalSec = await this.getIntervalSec();
+    const intervalSec = await this.intervalProvider();
     this.timer = setInterval(() => {
       if (this.busy) {
         return;
@@ -2565,22 +2568,15 @@ export class SyncManager {
       this.timer = null;
     }
   }
-
-  private async getIntervalSec(): Promise<number> {
-    const store = this.store as UsageStore;
-    // 读取设置：默认 300s
-    const settings = await (store as unknown as { getSyncIntervalSec?: () => Promise<number> }).getSyncIntervalSec?.();
-    return settings !== undefined ? settings : 300;
-  }
 }
 
 interface UsageRecordOrError {
-  records: import('../model/UsageRecord').UsageRecord[];
+  records: UsageRecord[];
   error?: string;
 }
 ```
 
-> 说明：`getIntervalSec` 通过可选方法读取同步间隔；若 store 未实现 `getSyncIntervalSec`（如测试 FakeStore），回退 300s。真实环境由 `SettingsStore` 提供。
+> 说明：同步间隔由构造器注入的 `intervalProvider` 提供；未注入时默认 300s。真实环境由 `DataProvider` 接线为 `() => SettingsStore.getSyncIntervalSec()`（Task 6）。
 
 - [ ] **Step 5: 注册并运行测试**
 
@@ -2861,6 +2857,7 @@ import type { UsageFetcher } from '../network/UsageFetcher';
 import { OpenCodeApi } from '../network/OpenCodeApi';
 import type { UsageRecord } from '../model/UsageRecord';
 import { SyncManager } from '../network/SyncManager';
+import { SettingsStore } from './SettingsStore';
 
 const realFetcher: UsageFetcher = {
   fetchUsagePage: async (ws: string, page: number, keyId?: string): Promise<UsageRecord[]> => {
@@ -2891,7 +2888,10 @@ export class DataProvider {
 
   static getSyncManager(): SyncManager {
     if (DataProvider.sync === null) {
-      DataProvider.sync = new SyncManager(DataProvider.getStore(), DataProvider.getFetcher());
+      DataProvider.sync = new SyncManager(
+        DataProvider.getStore(),
+        DataProvider.getFetcher(),
+        async (): Promise<number> => SettingsStore.getSyncIntervalSec());
     }
     return DataProvider.sync;
   }
@@ -3036,9 +3036,9 @@ struct Index {
         .textAlign(TextAlign.Center)
         .padding({ left: 32, right: 32 })
       Column({ space: 8 }) {
-        Text(`· ${$r('app.string.welcome_feat_1') as string}`).fontSize(14)
-        Text(`· ${$r('app.string.welcome_feat_2') as string}`).fontSize(14)
-        Text(`· ${$r('app.string.welcome_feat_3') as string}`).fontSize(14)
+        Row() { Text('· ').fontSize(14); Text($r('app.string.welcome_feat_1')).fontSize(14) }
+        Row() { Text('· ').fontSize(14); Text($r('app.string.welcome_feat_2')).fontSize(14) }
+        Row() { Text('· ').fontSize(14); Text($r('app.string.welcome_feat_3')).fontSize(14) }
       }
       .alignItems(HorizontalAlign.Start)
 
@@ -3213,7 +3213,7 @@ export struct BarChart {
   @Prop labels: string[] = [];
   @Prop values: number[] = [];
   @Prop colors: string[] = [];
-  @Prop version: number = 0;
+  @Watch('redraw') @Prop version: number = 0;
   private settings: RenderingContextSettings = new RenderingContextSettings(true);
   private ctx: CanvasRenderingContext2D = new CanvasRenderingContext2D(this.settings);
   @State axisColor: string = '#999999';
@@ -3501,9 +3501,10 @@ git commit -m "feat: canvas chart components (bar/donut/line)"
 // entry/src/main/ets/components/ui/StatCard.ets
 @Component
 export struct StatCard {
-  @Prop title: string = '';
-  @Prop value: string = '';
-  @Prop sub: string = '';
+  // ResourceStr = string | Resource，兼容直接传 $r() 资源与计算出的字符串
+  @Prop title: ResourceStr = '';
+  @Prop value: ResourceStr = '';
+  @Prop sub: ResourceStr = '';
   @Prop accent: boolean = false;
 
   build() {
@@ -3627,6 +3628,10 @@ export interface UsageAggregator {
   totals(period: string): Promise<Totals>;
   todayTrend(): Promise<TrendPoint[]>;
   dailyStats(days: number): Promise<Array<import('../model/Stats').DailyStat>>;
+  modelStats(period: string): Promise<ModelStat[]>;
+  sessionStatsPage(page: number, pageSize: number, days: number | null): Promise<[SessionStat[], number]>;
+  usageRecordsPage(page: number, pageSize: number, model: string | null, days: number | null): Promise<[RecordRow[], number]>;
+  listModels(): Promise<string[]>;
 }
 ```
 
@@ -3739,29 +3744,24 @@ export struct DashboardPage {
       }
       .width('100%')
 
-      Grid() {
-        GridItem() {
-          StatCard({ title: $r('app.string.ov_hit_rate') as string, value: formatPercent(this.vm.totals.hitRate), sub: '', accent: true })
+      // 用 Row/Column 两列布局（Grid 在 Scroll 内无高度会折叠，这是确定性方案）
+      Column({ space: 10 }) {
+        Row({ space: 10 }) {
+          StatCard({ title: $r('app.string.ov_hit_rate'), value: formatPercent(this.vm.totals.hitRate), sub: '', accent: true }).layoutWeight(1)
+          StatCard({ title: $r('app.string.ov_hits'), value: formatTokens(this.vm.totals.cacheHitTokens), sub: '', accent: false }).layoutWeight(1)
         }
-        GridItem() {
-          StatCard({ title: $r('app.string.ov_hits') as string, value: formatTokens(this.vm.totals.cacheHitTokens), sub: '', accent: false })
+        .width('100%')
+        Row({ space: 10 }) {
+          StatCard({ title: $r('app.string.ov_total_tokens'), value: formatTokens(this.vm.totals.totalInputTokens + this.vm.totals.totalOutputTokens + this.vm.totals.totalReasoningTokens), sub: '', accent: false }).layoutWeight(1)
+          StatCard({ title: $r('app.string.ov_requests'), value: `${this.vm.totals.requestCount}`, sub: '', accent: false }).layoutWeight(1)
         }
-        GridItem() {
-          StatCard({ title: $r('app.string.ov_total_tokens') as string, value: formatTokens(this.vm.totals.totalInputTokens + this.vm.totals.totalOutputTokens + this.vm.totals.totalReasoningTokens), sub: '', accent: false })
+        .width('100%')
+        Row({ space: 10 }) {
+          StatCard({ title: $r('app.string.ov_cost'), value: formatCost(this.vm.totals.totalCostUsd, this.currency, this.usdCny), sub: '', accent: false }).layoutWeight(1)
+          StatCard({ title: $r('app.string.ov_sessions'), value: `${this.vm.totals.sessionCount}`, sub: '', accent: false }).layoutWeight(1)
         }
-        GridItem() {
-          StatCard({ title: $r('app.string.ov_requests') as string, value: `${this.vm.totals.requestCount}`, sub: '', accent: false })
-        }
-        GridItem() {
-          StatCard({ title: $r('app.string.ov_cost') as string, value: formatCost(this.vm.totals.totalCostUsd, this.currency, this.usdCny), sub: '', accent: false })
-        }
-        GridItem() {
-          StatCard({ title: $r('app.string.ov_sessions') as string, value: `${this.vm.totals.sessionCount}`, sub: '', accent: false })
-        }
+        .width('100%')
       }
-      .columnsTemplate('1fr 1fr')
-      .rowsGap(10)
-      .columnsGap(10)
       .width('100%')
     }
     .width('100%')
@@ -3772,7 +3772,7 @@ export struct DashboardPage {
     Column({ space: 8 }) {
       Row() {
         Text($r('app.string.today_trend')).fontSize(15).fontWeight(FontWeight.Bold)
-        Text(` ${$r('app.string.hours_24')}`).fontSize(11).fontColor($r('app.color.text_muted'))
+        Text($r('app.string.hours_24')).fontSize(11).fontColor($r('app.color.text_muted'))
         Blank()
       }
       .width('100%')
@@ -3780,16 +3780,19 @@ export struct DashboardPage {
       // 输入 + 输出分组柱状图（今日 24h）
       Row({ space: 2 }) {
         ForEach(this.vm.trend, (t: TrendPoint) => {
+          // layoutWeight 加在 Column 上（Row 内分宽度），BarChart 撑满自身
           Column() {
             BarChart({
               labels: [t.hour],
               values: [t.input],
-              colors: [$r('app.color.bar_input') as string],
+              // Canvas fillStyle 需要真实色值字符串，用固定调色板（与 Task 9 图表一致，随主题不变）
+              colors: ['#2F6FED'],
               version: this.chartVersion,
             })
+              .width('100%')
               .height(180)
-              .layoutWeight(1)
           }
+          .layoutWeight(1)
         }, (t: TrendPoint) => t.hour)
       }
       .width('100%')
@@ -3990,15 +3993,19 @@ export struct StatsPage {
 
   @Builder
   KpiCards() {
-    Grid() {
-      GridItem() { StatCard({ title: $r('app.string.input'), value: formatTokens(this.vm.totals.totalInputTokens), sub: '', accent: false }) }
-      GridItem() { StatCard({ title: $r('app.string.output'), value: formatTokens(this.vm.totals.totalOutputTokens), sub: '', accent: false }) }
-      GridItem() { StatCard({ title: $r('app.string.reasoning'), value: formatTokens(this.vm.totals.totalReasoningTokens), sub: '', accent: false }) }
-      GridItem() { StatCard({ title: $r('app.string.cost'), value: formatCost(this.vm.totals.totalCostUsd, this.currency, this.usdCny), sub: '', accent: true }) }
+    // Row/Column 两列布局（Grid 在 Scroll 内无高度会折叠）
+    Column({ space: 10 }) {
+      Row({ space: 10 }) {
+        StatCard({ title: $r('app.string.input'), value: formatTokens(this.vm.totals.totalInputTokens), sub: '', accent: false }).layoutWeight(1)
+        StatCard({ title: $r('app.string.output'), value: formatTokens(this.vm.totals.totalOutputTokens), sub: '', accent: false }).layoutWeight(1)
+      }
+      .width('100%')
+      Row({ space: 10 }) {
+        StatCard({ title: $r('app.string.reasoning'), value: formatTokens(this.vm.totals.totalReasoningTokens), sub: '', accent: false }).layoutWeight(1)
+        StatCard({ title: $r('app.string.cost'), value: formatCost(this.vm.totals.totalCostUsd, this.currency, this.usdCny), sub: '', accent: true }).layoutWeight(1)
+      }
+      .width('100%')
     }
-    .columnsTemplate('1fr 1fr')
-    .rowsGap(10)
-    .columnsGap(10)
     .width('100%')
   }
 
@@ -4006,17 +4013,24 @@ export struct StatsPage {
   TokenDetail() {
     Column({ space: 8 }) {
       Text($r('app.string.token_breakdown')).fontSize(15).fontWeight(FontWeight.Bold)
-      Grid() {
-        GridItem() { StatCard({ title: $r('app.string.input'), value: formatTokens(this.vm.totals.uncachedInputTokens), sub: '', accent: false }) }
-        GridItem() { StatCard({ title: $r('app.string.output'), value: formatTokens(this.vm.totals.totalOutputTokens), sub: '', accent: false }) }
-        GridItem() { StatCard({ title: $r('app.string.reasoning'), value: formatTokens(this.vm.totals.totalReasoningTokens), sub: '', accent: false }) }
-        GridItem() { StatCard({ title: $r('app.string.cache_read'), value: formatTokens(this.vm.totals.cacheHitTokens), sub: '', accent: false }) }
-        GridItem() { StatCard({ title: $r('app.string.cache_write'), value: formatTokens(this.vm.totals.cacheWriteTokens), sub: '', accent: false }) }
-        GridItem() { StatCard({ title: $r('app.string.ov_sessions'), value: `${this.vm.totals.sessionCount}`, sub: '', accent: false }) }
+      // Row/Column 两列布局（Grid 在 Scroll 内无高度会折叠）
+      Column({ space: 10 }) {
+        Row({ space: 10 }) {
+          StatCard({ title: $r('app.string.input'), value: formatTokens(this.vm.totals.uncachedInputTokens), sub: '', accent: false }).layoutWeight(1)
+          StatCard({ title: $r('app.string.output'), value: formatTokens(this.vm.totals.totalOutputTokens), sub: '', accent: false }).layoutWeight(1)
+        }
+        .width('100%')
+        Row({ space: 10 }) {
+          StatCard({ title: $r('app.string.reasoning'), value: formatTokens(this.vm.totals.totalReasoningTokens), sub: '', accent: false }).layoutWeight(1)
+          StatCard({ title: $r('app.string.cache_read'), value: formatTokens(this.vm.totals.cacheHitTokens), sub: '', accent: false }).layoutWeight(1)
+        }
+        .width('100%')
+        Row({ space: 10 }) {
+          StatCard({ title: $r('app.string.cache_write'), value: formatTokens(this.vm.totals.cacheWriteTokens), sub: '', accent: false }).layoutWeight(1)
+          StatCard({ title: $r('app.string.ov_sessions'), value: `${this.vm.totals.sessionCount}`, sub: '', accent: false }).layoutWeight(1)
+        }
+        .width('100%')
       }
-      .columnsTemplate('1fr 1fr')
-      .rowsGap(10)
-      .columnsGap(10)
       .width('100%')
     }
     .width('100%')
@@ -4333,20 +4347,33 @@ export struct RecordsPage {
     return id.length > 12 ? `…${id.substring(id.length - 12)}` : id;
   }
 
+  /** Select 选项：首项「全部模型」（资源），其后各模型。Select 期望 SelectOption[]。 */
+  private modelOptions(): SelectOption[] {
+    const out: SelectOption[] = [{ value: $r('app.string.all_models') }];
+    for (const m of this.vm.models) {
+      out.push({ value: m });
+    }
+    return out;
+  }
+
+  private modelSelectIndex(): number {
+    const idx = this.vm.models.indexOf(this.vm.selectedModel);
+    return idx >= 0 ? idx + 1 : 0;
+  }
+
   @Builder
   RecordsCard() {
     Column({ space: 8 }) {
       Row() {
         Text($r('app.string.usage_records')).fontSize(15).fontWeight(FontWeight.Bold)
         Blank()
-        Select(this.vm.models.length > 0 ? [''].concat(this.vm.models) : [''])
-          .selected(this.vm.models.indexOf(this.vm.selectedModel) >= 0 ? this.vm.models.indexOf(this.vm.selectedModel) + 1 : 0)
+        Select(this.modelOptions())
+          .selected(this.modelSelectIndex())
           .value(this.vm.selectedModel === '' ? $r('app.string.all_models') : this.vm.selectedModel)
-          .fontSize(12)
+          .font({ size: 12 })
           .width(140)
-          .onSelect((index: number, text: string) => {
-            const target = index === 0 ? '' : this.vm.models[index - 1];
-            this.vm.setModel(target);
+          .onSelect((index: number) => {
+            this.vm.setModel(index === 0 ? '' : this.vm.models[index - 1]);
           })
         Text(`${this.vm.recordTotal}`).fontSize(11).fontColor($r('app.color.text_muted'))
       }
@@ -4418,12 +4445,60 @@ export struct RecordsPage {
 
 `MainArea()` 中 `this.currentTab === 2` 替换为 `RecordsPage()`；`import { RecordsPage } from './RecordsPage';`。`Make Project` + 运行，Mock 下记录页显示会话表 + 记录表 + 分页。
 
-> 注：Mock 的 `sessionStatsPage`/`usageRecordsPage` 目前返回空（Task 6 Step 2 说明）；如需 Mock 可看数据，请在 `MockRepository` 内补内存分页实现（过滤 + slice），代码约 20 行，按 `calcModels` 同风格补充即可。
+- [ ] **Step 5: 补 Mock 内存分页（`MockRepository`）**
 
-- [ ] **Step 5: Commit（非 git 仓库则跳过）**
+让 Mock 模式下记录页也有数据可看。在 `MockRepository` 中替换 `sessionStatsPage`/`usageRecordsPage` 的 `return [[], 0]` 实现：
+
+```typescript
+  async sessionStatsPage(page: number, pageSize: number, days: number | null): Promise<[SessionStat[], number]> {
+    const dayMs = days !== null && days > 0 ? days * 86400 * 1000 : Number.MAX_SAFE_INTEGER;
+    const map = new Map<string, SessionStat>();
+    for (const r of this.records) {
+      if (Date.now() - Date.parse(r.createdAt) > dayMs) { continue; }
+      let s = map.get(r.sessionId);
+      if (s === undefined) {
+        s = { sessionId: r.sessionId, requestCount: 0, totalInputTokens: 0, uncachedInputTokens: 0, totalOutputTokens: 0, totalReasoningTokens: 0, totalCostUsd: 0, lastAt: r.createdAt };
+        map.set(r.sessionId, s);
+      }
+      s.requestCount++;
+      s.totalInputTokens += r.inputTokens + r.cacheReadTokens + r.cacheWrite5mTokens + r.cacheWrite1hTokens;
+      s.uncachedInputTokens += r.inputTokens;
+      s.totalOutputTokens += r.outputTokens;
+      s.totalReasoningTokens += r.reasoningTokens;
+      s.totalCostUsd += r.costUsd;
+      if (r.createdAt > s.lastAt) { s.lastAt = r.createdAt; }
+    }
+    const all = [...map.values()];
+    all.sort((a, b) => b.lastAt.localeCompare(a.lastAt));
+    const total = all.length;
+    const start = (page - 1) * pageSize;
+    const rows = all.slice(start, start + pageSize).map((s) => ({ ...s, totalCostUsd: Number(s.totalCostUsd.toFixed(6)) }));
+    return [rows, total];
+  }
+
+  async usageRecordsPage(page: number, pageSize: number, model: string | null, days: number | null): Promise<[RecordRow[], number]> {
+    const dayMs = days !== null && days > 0 ? days * 86400 * 1000 : Number.MAX_SAFE_INTEGER;
+    let list = this.records.filter((r) => model === null || model === '' || r.model === model);
+    list = list.filter((r) => Date.now() - Date.parse(r.createdAt) <= dayMs);
+    list = list.slice().sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+    const total = list.length;
+    const start = (page - 1) * pageSize;
+    const rows = list.slice(start, start + pageSize).map((r) => ({
+      usgId: r.usgId, createdAt: r.createdAt, model: r.model, provider: r.provider,
+      inputTokens: r.inputTokens, outputTokens: r.outputTokens, reasoningTokens: r.reasoningTokens,
+      cacheReadTokens: r.cacheReadTokens, cacheWriteTokens: r.cacheWrite5mTokens + r.cacheWrite1hTokens,
+      costUsd: r.costUsd, sessionId: r.sessionId, plan: r.plan,
+    }));
+    return [rows, total];
+  }
+```
+
+需在 `MockRepository` 顶部补 `import type { SessionStat, RecordRow } from '../model/Stats';`。
+
+- [ ] **Step 6: Commit（非 git 仓库则跳过）**
 
 ```bash
-git add entry/src/main/ets/pages entry/src/main/ets/components/ui
+git add entry/src/main/ets/pages entry/src/main/ets/components/ui entry/src/main/ets/data
 git commit -m "feat: records page with sessions and paginated details"
 ```
 
@@ -4451,8 +4526,9 @@ git commit -m "feat: records page with sessions and paginated details"
 // entry/src/main/ets/components/ui/SettingRow.ets
 @Component
 export struct SettingRow {
-  @Prop title: string = '';
-  @Prop desc: string = '';
+  // ResourceStr = string | Resource，兼容 $r() 资源与计算字符串
+  @Prop title: ResourceStr = '';
+  @Prop desc: ResourceStr = '';
   @BuilderParam content: () => void = () => {};
 
   build() {
@@ -4487,6 +4563,7 @@ import { SettingRow } from '../components/ui/SettingRow';
 import { formatDateTime, parseIso } from '../common/utils/TimeUtil';
 import { Constants } from '../common/constants/Constants';
 import { promptAction } from '@kit.ArkUI';
+import { ConfigurationConstant } from '@kit.AbilityKit';
 
 @Component
 export struct SettingsPage {
@@ -4529,9 +4606,9 @@ export struct SettingsPage {
   }
 
   @Builder
-  PillRow(options: Array<{ value: string; label: string }>, current: string, onPick: (v: string) => void) {
+  PillRow(options: Array<{ value: string; label: ResourceStr }>, current: string, onPick: (v: string) => void) {
     Row({ space: 6 }) {
-      ForEach(options, (opt: { value: string; label: string }) => {
+      ForEach(options, (opt: { value: string; label: ResourceStr }) => {
         Text(opt.label)
           .fontSize(11)
           .padding({ left: 8, right: 8, top: 4, bottom: 4 })
@@ -4539,7 +4616,7 @@ export struct SettingsPage {
           .backgroundColor(current === opt.value ? $r('app.color.accent') : $r('app.color.divider'))
           .fontColor(current === opt.value ? Color.White : $r('app.color.text_secondary'))
           .onClick(() => onPick(opt.value))
-      }, (opt: { value: string; label: string }) => opt.value)
+      }, (opt: { value: string; label: ResourceStr }) => opt.value)
     }
   }
 
@@ -4676,7 +4753,10 @@ export struct SettingsPage {
 
   private applyTheme(mode: string): void {
     const ctx = this.getUIContext();
-    ctx.setColorMode(mode === 'dark' ? 1 : 0);
+    const colorMode = mode === 'dark'
+      ? ConfigurationConstant.ColorMode.COLOR_MODE_DARK
+      : ConfigurationConstant.ColorMode.COLOR_MODE_LIGHT;
+    ctx.setColorMode(colorMode);
   }
 }
 ```
@@ -4709,11 +4789,11 @@ export struct AboutPage {
 
         Column({ space: 8 }) {
           Text($r('app.string.about_features')).fontSize(15).fontWeight(FontWeight.Bold).width('100%')
-          Text(`· ${$r('app.string.feat_1')}`).fontSize(13).fontColor($r('app.color.text_secondary'))
-          Text(`· ${$r('app.string.feat_2')}`).fontSize(13).fontColor($r('app.color.text_secondary'))
-          Text(`· ${$r('app.string.feat_3')}`).fontSize(13).fontColor($r('app.color.text_secondary'))
-          Text(`· ${$r('app.string.feat_4')}`).fontSize(13).fontColor($r('app.color.text_secondary'))
-          Text(`· ${$r('app.string.feat_5')}`).fontSize(13).fontColor($r('app.color.text_secondary'))
+          Row() { Text('· ').fontSize(13); Text($r('app.string.feat_1')).fontSize(13).fontColor($r('app.color.text_secondary')) }
+          Row() { Text('· ').fontSize(13); Text($r('app.string.feat_2')).fontSize(13).fontColor($r('app.color.text_secondary')) }
+          Row() { Text('· ').fontSize(13); Text($r('app.string.feat_3')).fontSize(13).fontColor($r('app.color.text_secondary')) }
+          Row() { Text('· ').fontSize(13); Text($r('app.string.feat_4')).fontSize(13).fontColor($r('app.color.text_secondary')) }
+          Row() { Text('· ').fontSize(13); Text($r('app.string.feat_5')).fontSize(13).fontColor($r('app.color.text_secondary')) }
         }
         .width('100%')
         .padding(12)
