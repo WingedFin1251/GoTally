@@ -4,8 +4,9 @@ import { DashboardViewModel } from './DashboardViewModel';
 import { StatCard } from '../components/ui/StatCard';
 import { QuotaProgress } from '../components/ui/QuotaProgress';
 import { BarChart } from '../components/charts/BarChart';
-import { formatTokens, formatCost, formatPercent } from '../common/utils/Formatter';
-import { formatDurationShort } from '../common/utils/TimeUtil';
+import { formatTokensUi, formatCost, formatPercent } from '../common/utils/Formatter';
+import { formatReset } from '../common/utils/TimeUtil';
+import { isZh } from '../common/utils/Locale';
 import { Constants } from '../common/constants/Constants';
 import { SettingsStore } from '../data/SettingsStore';
 import { OpenCodeApi } from '../network/OpenCodeApi';
@@ -18,6 +19,9 @@ export struct DashboardPage {
   @State currency: string = 'CNY';
   @State usdCny: number = Constants.DEFAULT_USD_CNY;
   @State wide: boolean = false;
+  @StorageProp('statusBarHeight') statusBarHeight: number = 0;
+  @StorageProp('navIndicatorHeight') navIndicatorHeight: number = 0;
+  private refreshRetried: boolean = false;
 
   aboutToAppear(): void {
     this.wide = display.getDefaultDisplaySync().width >= 840;
@@ -26,8 +30,17 @@ export struct DashboardPage {
   }
 
   private async refresh(): Promise<void> {
-    await this.vm.load();
-    this.chartVersion++;
+    try {
+      await this.vm.load();
+      this.chartVersion++;
+    } catch (e) {
+      // 首次加载失败（如 RDB 初始化竞争）时延迟重试一次，避免页面保持空白
+      console.error('Dashboard load failed: ' + (e instanceof Error ? e.message : String(e)));
+      if (!this.refreshRetried) {
+        this.refreshRetried = true;
+        setTimeout(() => { this.refresh(); }, 800);
+      }
+    }
   }
 
   private async initCurrency(): Promise<void> {
@@ -72,7 +85,7 @@ export struct DashboardPage {
           label: this.quotaLabel(q.label),
           percent: q.used,
           remainingText: `${q.remaining}%`,
-          resetText: formatDurationShort(q.resetInSec),
+          resetText: formatReset(q.resetInSec, isZh()),
         })
       }, (q: QuotaWindow) => q.label)
     }
@@ -97,11 +110,11 @@ export struct DashboardPage {
       Column({ space: 10 }) {
         Row({ space: 10 }) {
           StatCard({ title: $r('app.string.ov_hit_rate'), value: formatPercent(this.vm.totals.hitRate), sub: '', accent: true }).layoutWeight(1)
-          StatCard({ title: $r('app.string.ov_hits'), value: formatTokens(this.vm.totals.cacheHitTokens), sub: '', accent: false }).layoutWeight(1)
+          StatCard({ title: $r('app.string.ov_hits'), value: formatTokensUi(this.vm.totals.cacheHitTokens), sub: '', accent: false }).layoutWeight(1)
         }
         .width('100%')
         Row({ space: 10 }) {
-          StatCard({ title: $r('app.string.ov_total_tokens'), value: formatTokens(this.vm.totals.totalInputTokens + this.vm.totals.totalOutputTokens + this.vm.totals.totalReasoningTokens), sub: '', accent: false }).layoutWeight(1)
+          StatCard({ title: $r('app.string.ov_total_tokens'), value: formatTokensUi(this.vm.totals.totalInputTokens + this.vm.totals.totalOutputTokens + this.vm.totals.totalReasoningTokens), sub: '', accent: false }).layoutWeight(1)
           StatCard({ title: $r('app.string.ov_requests'), value: `${this.vm.totals.requestCount}`, sub: '', accent: false }).layoutWeight(1)
         }
         .width('100%')
@@ -172,32 +185,44 @@ export struct DashboardPage {
   }
 
   build() {
-    Scroll() {
-      Column({ space: 12 }) {
+    Stack({ alignContent: Alignment.Top }) {
+      // 滚动内容：可滚到固定标题栏下方（标题栏模糊蒙版保证可读性）
+      Scroll() {
+        Column({ space: 12 }) {
+          this.QuotaRow()
+          if (this.wide) {
+            Row({ space: 12 }) {
+              Column() { this.OverviewGrid() }.layoutWeight(1)
+              Column() { this.TodayTrendCard() }.layoutWeight(1)
+            }
+            .width('100%')
+          } else {
+            this.OverviewGrid()
+            this.TodayTrendCard()
+          }
+        }
+        .padding({ left: 12, right: 12, top: this.statusBarHeight + 64, bottom: 96 })
+      }
+      .width('100%')
+      .height('100%')
+      .backgroundColor($r('app.color.bg_page'))
+      .expandSafeArea([SafeAreaType.SYSTEM], [SafeAreaEdge.BOTTOM])
+      .scrollBar(BarState.Off)
+
+      // 固定标题栏：顶部让出状态栏（不与通知栏重叠），背景模糊
+      Column() {
         Row() {
           Text($r('app.string.home_title')).fontSize(18).fontWeight(FontWeight.Bold)
           Blank()
           this.RangePills()
         }
         .width('100%')
-
-        this.QuotaRow()
-        if (this.wide) {
-          Row({ space: 12 }) {
-            Column() { this.OverviewGrid() }.layoutWeight(1)
-            Column() { this.TodayTrendCard() }.layoutWeight(1)
-          }
-          .width('100%')
-        } else {
-          this.OverviewGrid()
-          this.TodayTrendCard()
-        }
       }
-      .padding(12)
+      .width('100%')
+      .padding({ left: 12, right: 12, top: 12 + this.statusBarHeight, bottom: 10 })
+      .backgroundBlurStyle(BlurStyle.COMPONENT_REGULAR)
     }
     .width('100%')
     .height('100%')
-    .backgroundColor($r('app.color.bg_page'))
-    .scrollBar(BarState.Off)
   }
 }

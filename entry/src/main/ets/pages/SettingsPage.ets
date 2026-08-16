@@ -10,6 +10,8 @@ import { SettingsCard } from '../components/ui/SettingsCard';
 import { formatDateTime, parseIso } from '../common/utils/TimeUtil';
 import { Constants } from '../common/constants/Constants';
 import { ConfigurationConstant, common } from '@kit.AbilityKit';
+import { pasteboard } from '@kit.BasicServicesKit';
+import { setLanguage } from '../common/utils/Locale';
 
 interface PillOption {
   value: string;
@@ -26,6 +28,8 @@ export struct SettingsPage {
   @State syncState: SyncState = { lastSyncAt: '', lastSyncStatus: '', lastSyncError: '', lastInsertedCount: 0, deepestPageFetched: -1, totalRecords: 0, oldestRecordAt: '', newestRecordAt: '' };
   @State syncing: boolean = false;
   @State syncProgressMsg: string = '';
+  @StorageProp('statusBarHeight') statusBarHeight: number = 0;
+  @StorageProp('navIndicatorHeight') navIndicatorHeight: number = 0;
 
   aboutToAppear(): void {
     this.load();
@@ -64,18 +68,18 @@ export struct SettingsPage {
   }
 
   build() {
-    Scroll() {
-      Column({ space: 12 }) {
-        Row() {
-          Text($r('app.string.settings_title')).fontSize(18).fontWeight(FontWeight.Bold)
-          Blank()
-        }
-        .width('100%')
-
-        // 账户
+    Stack({ alignContent: Alignment.Top }) {
+      // 滚动内容：可滚到固定标题栏下方（标题栏模糊蒙版保证可读性）
+      Scroll() {
+        Column({ space: 12 }) {
+          // 账户
         SettingsCard({ title: $r('app.string.set_account') }) {
           SettingRow({ title: $r('app.string.set_login_state'), desc: this.loggedIn ? $r('app.string.logged_in') : $r('app.string.not_logged_in') }) {}
-          SettingRow({ title: $r('app.string.set_workspace'), desc: this.workspace }) {}
+          SettingRow({ title: $r('app.string.set_workspace'), desc: this.workspace }) {
+            Button('复制').fontSize(12).height(30).onClick(() => {
+              this.copyWorkspace();
+            })
+          }
           SettingRow({ title: $r('app.string.set_login_method'), desc: $r('app.string.login_method_desc') }) {
             Button($r('app.string.relogin')).fontSize(12).height(30).onClick(() => {
               router.pushUrl({ url: 'pages/Login' });
@@ -146,7 +150,7 @@ export struct SettingsPage {
             this.PillRow(
               [{ value: 'zh', label: '中文' }, { value: 'en', label: 'English' }],
               this.settings.language,
-              (v: string) => { this.settings.language = v; SettingsStore.save(this.settings); promptAction.showToast({ message: '重启后生效' }); })
+              (v: string) => { this.settings.language = v; SettingsStore.save(this.settings); setLanguage(v); promptAction.showToast({ message: '重启后生效' }); })
           }
         }
 
@@ -166,12 +170,41 @@ export struct SettingsPage {
           }
         }
       }
-      .padding(12)
+      .padding({ left: 12, right: 12, top: this.statusBarHeight + 64, bottom: 96 })
     }
     .width('100%')
     .height('100%')
     .backgroundColor($r('app.color.bg_page'))
+    .expandSafeArea([SafeAreaType.SYSTEM], [SafeAreaEdge.BOTTOM])
     .scrollBar(BarState.Off)
+
+    // 固定标题栏：顶部让出状态栏（不与通知栏重叠），背景模糊
+    Column() {
+      Row() {
+        Text($r('app.string.settings_title')).fontSize(18).fontWeight(FontWeight.Bold)
+        Blank()
+      }
+      .width('100%')
+    }
+    .width('100%')
+    .padding({ left: 12, right: 12, top: 12 + this.statusBarHeight, bottom: 10 })
+    .backgroundBlurStyle(BlurStyle.COMPONENT_REGULAR)
+  }
+  .width('100%')
+  .height('100%')
+}
+
+  private async copyWorkspace(): Promise<void> {
+    if (this.workspace === '') {
+      return;
+    }
+    const data = pasteboard.createData(pasteboard.MIMETYPE_TEXT_PLAIN, this.workspace);
+    try {
+      await pasteboard.getSystemPasteboard().setData(data);
+      promptAction.showToast({ message: '已复制' });
+    } catch (e) {
+      promptAction.showToast({ message: '复制失败' });
+    }
   }
 
   private syncInfoDesc(): string {

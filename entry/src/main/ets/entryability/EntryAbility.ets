@@ -23,13 +23,21 @@ export default class EntryAbility extends UIAbility {
 
   onWindowStageCreate(windowStage: window.WindowStage): void {
     hilog.info(DOMAIN, 'testTag', '%{public}s', 'Ability onWindowStageCreate');
-    windowStage.loadContent('pages/Index', (err) => {
-      if (err.code) {
-        hilog.error(DOMAIN, 'testTag', 'Failed to load the content. Cause: %{public}s', JSON.stringify(err));
-        return;
-      }
-      hilog.info(DOMAIN, 'testTag', 'Succeeded in loading the content.');
-    });
+    const loadContent = (): void => {
+      windowStage.loadContent('pages/Index', (err) => {
+        if (err.code) {
+          hilog.error(DOMAIN, 'testTag', 'Failed to load the content. Cause: %{public}s', JSON.stringify(err));
+          return;
+        }
+        hilog.info(DOMAIN, 'testTag', 'Succeeded in loading the content.');
+      });
+    };
+    // 沉浸式布局：内容延伸到状态栏/导航条区域，再配合页面内的系统避让区内边距实现全屏效果
+    try {
+      windowStage.getMainWindowSync().setWindowLayoutFullScreen(true).then(loadContent).catch(loadContent);
+    } catch (e) {
+      loadContent();
+    }
   }
 
   onWindowStageDestroy(): void { /* 释放资源 */ }

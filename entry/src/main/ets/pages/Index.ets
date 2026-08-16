@@ -1,8 +1,9 @@
 // entry/src/main/ets/pages/Index.ets
-import { router } from '@kit.ArkUI';
+import { router, window } from '@kit.ArkUI';
 import { HdsTabs, HdsTabsController, HdsTabsFloatingStyle, hdsMaterial } from '@kit.UIDesignKit';
 import { DataProvider } from '../data/DataProvider';
 import { SettingsStore } from '../data/SettingsStore';
+import { setLanguage } from '../common/utils/Locale';
 import { DashboardPage } from './DashboardPage';
 import { StatsPage } from './StatsPage';
 import { RecordsPage } from './RecordsPage';
@@ -14,18 +15,48 @@ import { AboutPage } from './AboutPage';
 struct Index {
   @State currentTab: number = 0;
   @State loggedIn: boolean = false;
+  @State navIndicatorHeight: number = 0;
   @Watch('applyAutoSync') @StorageLink('autoSyncChanged') autoSyncVersion: number = 0;
   @Watch('onLogout') @StorageLink('logoutVersion') logoutVersion: number = 0;
   private tabsController: HdsTabsController = new HdsTabsController();
 
   aboutToAppear(): void {
+    this.initLocale();
     this.checkLogin();
     this.applyAutoSync();
+    this.resolveSystemInsets();
   }
 
   onPageShow(): void {
     this.checkLogin();
     this.applyAutoSync();
+  }
+
+  /** 同步当前语言到 Locale 模块，驱动数字格式（万/亿 vs k/M）本地化。 */
+  private async initLocale(): Promise<void> {
+    setLanguage(await SettingsStore.getLanguage());
+  }
+
+  /**
+   * 沉浸式布局下读取系统避让区：状态栏高度（顶部）与底部导航（含手势小白条）高度，
+   * 供悬浮导航栏上移、各页面内容加安全区内边距使用。
+   */
+  private async resolveSystemInsets(): Promise<void> {
+    try {
+      const win = await window.getLastWindow(getContext(this));
+      const sys = win.getWindowAvoidArea(window.AvoidAreaType.TYPE_SYSTEM);
+      const nav = win.getWindowAvoidArea(window.AvoidAreaType.TYPE_NAVIGATION_INDICATOR);
+      const top = sys.topRect.height;
+      // 底部只取手势小白条自身高度，悬浮栏紧贴其上方，避免抬得过高
+      const bottom = nav.bottomRect.height > 0 ? nav.bottomRect.height : sys.bottomRect.height;
+      this.navIndicatorHeight = bottom;
+      AppStorage.setOrCreate('statusBarHeight', top);
+      AppStorage.setOrCreate('navIndicatorHeight', bottom);
+    } catch (e) {
+      this.navIndicatorHeight = 0;
+      AppStorage.setOrCreate('statusBarHeight', 0);
+      AppStorage.setOrCreate('navIndicatorHeight', 0);
+    }
   }
 
   private async checkLogin(): Promise<void> {
@@ -49,7 +80,7 @@ struct Index {
     this.applyAutoSync();
   }
 
-  /** HdsTabs 悬浮样式：液态玻璃沉浸材质（参考 HDS 规范）。 */
+  /** HdsTabs 悬浮样式：液态玻璃沉浸材质（参考 HDS 规范）；HdsTabs 自身已处理系统安全区，无需额外叠加。 */
   private buildFloatingStyle(): HdsTabsFloatingStyle {
     return {
       barSideMargin: 16,
