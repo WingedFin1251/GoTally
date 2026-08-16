@@ -1,4 +1,5 @@
 // entry/src/main/ets/pages/StatsPage.ets
+import { display } from '@kit.ArkUI';
 import { StatsViewModel } from './StatsViewModel';
 import { StatCard } from '../components/ui/StatCard';
 import { DonutChart, DonutItem } from '../components/charts/DonutChart';
@@ -15,8 +16,10 @@ export struct StatsPage {
   @State chartVersion: number = 0;
   @State currency: string = 'CNY';
   @State usdCny: number = Constants.DEFAULT_USD_CNY;
+  @State wide: boolean = false;
 
   aboutToAppear(): void {
+    this.wide = display.getDefaultDisplaySync().width >= 840;
     this.refresh();
     this.initCurrency();
   }
@@ -234,8 +237,16 @@ export struct StatsPage {
 
         this.KpiCards()
         this.TokenDetail()
-        this.ModelRank()
-        this.TrendCard()
+        if (this.wide) {
+          Row({ space: 12 }) {
+            this.ModelRank().layoutWeight(1)
+            this.TrendCard().layoutWeight(1)
+          }
+          .width('100%')
+        } else {
+          this.ModelRank()
+          this.TrendCard()
+        }
       }
       .padding(12)
     }

@@ -18,6 +18,12 @@ export default function formatterTest() {
     it('formatCost_cny', 0, () => {
       expect(formatCost(0.5, 'CNY', 7.2)).assertEqual('¥3.60');
     });
+    it('formatCost_zero', 0, () => {
+      expect(formatCost(0, 'CNY', 7.2)).assertEqual('¥0.00');
+    });
+    it('formatCost_cny_rate', 0, () => {
+      expect(formatCost(1, 'CNY', 7.25)).assertEqual('¥7.25');
+    });
     it('formatPercent', 0, () => {
       expect(formatPercent(45.678)).assertEqual('45.7%');
     });

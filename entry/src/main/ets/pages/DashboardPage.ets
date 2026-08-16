@@ -1,4 +1,5 @@
 // entry/src/main/ets/pages/DashboardPage.ets
+import { display } from '@kit.ArkUI';
 import { DashboardViewModel } from './DashboardViewModel';
 import { StatCard } from '../components/ui/StatCard';
 import { QuotaProgress } from '../components/ui/QuotaProgress';
@@ -17,8 +18,10 @@ export struct DashboardPage {
   @State chartVersion: number = 0;
   @State currency: string = 'CNY';
   @State usdCny: number = Constants.DEFAULT_USD_CNY;
+  @State wide: boolean = false;
 
   aboutToAppear(): void {
+    this.wide = display.getDefaultDisplaySync().width >= 840;
     this.refresh();
     this.initCurrency();
   }
@@ -161,8 +164,16 @@ export struct DashboardPage {
         .width('100%')
 
         this.QuotaRow()
-        this.OverviewGrid()
-        this.TodayTrendCard()
+        if (this.wide) {
+          Row({ space: 12 }) {
+            this.OverviewGrid().layoutWeight(1)
+            this.TodayTrendCard().layoutWeight(1)
+          }
+          .width('100%')
+        } else {
+          this.OverviewGrid()
+          this.TodayTrendCard()
+        }
       }
       .padding(12)
     }

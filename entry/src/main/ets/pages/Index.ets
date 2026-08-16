@@ -14,6 +14,7 @@ struct Index {
   @State currentTab: number = 0;
   @State loggedIn: boolean = false;
   @State wide: boolean = false;
+  @StorageLink('themeVersion') themeVersion: number = 0;
 
   aboutToAppear(): void {
     this.checkLogin();
@@ -120,10 +121,10 @@ struct Index {
           .height('100%')
           .backgroundColor($r('app.color.bg_card'))
 
-          this.MainArea()
+          this.MainArea().key(this.themeVersion)
         } else {
           Column() {
-            this.MainArea()
+            this.MainArea().key(this.themeVersion)
             this.TabBar()
           }
           .width('100%')

@@ -202,5 +202,6 @@ export struct SettingsPage {
       ? ConfigurationConstant.ColorMode.COLOR_MODE_DARK
       : ConfigurationConstant.ColorMode.COLOR_MODE_LIGHT;
     ctx.setColorMode(colorMode);
+    AppStorage.setOrCreate('themeVersion', (AppStorage.get('themeVersion') as number ?? 0) + 1);
   }
 }

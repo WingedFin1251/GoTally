@@ -41,6 +41,7 @@ function seedRecords(): UsageRecord[] {
 /** Mock 数据仓储：无账号时返回示例用量，便于调试 UI 与图表。 */
 export class MockRepository implements UsageStore {
   private records: UsageRecord[] = seedRecords();
+  private token: string = Constants.USE_MOCK_DATA ? 'auth=mock' : '';
   private syncState: SyncState = {
     lastSyncAt: new Date().toISOString(), lastSyncStatus: 'ok', lastSyncError: '',
     lastInsertedCount: 0, deepestPageFetched: 0, totalRecords: 800,
@@ -48,11 +49,12 @@ export class MockRepository implements UsageStore {
     newestRecordAt: this.records[0].createdAt,
   };
 
-  async getToken(): Promise<string> { return Constants.USE_MOCK_DATA ? 'auth=mock' : ''; }
+  async getToken(): Promise<string> { return this.token; }
   async getWorkspaceHint(): Promise<string> { return 'wrk_mock'; }
   async saveResolvedWorkspace(workspaceId: string): Promise<void> {}
   async saveToken(token: string, workspaceId: string): Promise<void> {}
   async clearAccount(): Promise<void> {
+    this.token = '';
     this.syncState = {
       lastSyncAt: '', lastSyncStatus: 'ok', lastSyncError: '',
       lastInsertedCount: 0, deepestPageFetched: -1, totalRecords: 0,
