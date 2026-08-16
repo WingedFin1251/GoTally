@@ -1,6 +1,6 @@
 // entry/src/main/ets/pages/Index.ets
 import { router } from '@kit.ArkUI';
-import { display } from '@kit.ArkUI';
+import { HdsTabs, HdsTabsController, HdsTabsFloatingStyle, hdsMaterial } from '@kit.UIDesignKit';
 import { DataProvider } from '../data/DataProvider';
 import { SettingsStore } from '../data/SettingsStore';
 import { DashboardPage } from './DashboardPage';
@@ -14,20 +14,18 @@ import { AboutPage } from './AboutPage';
 struct Index {
   @State currentTab: number = 0;
   @State loggedIn: boolean = false;
-  @State wide: boolean = false;
   @Watch('applyAutoSync') @StorageLink('autoSyncChanged') autoSyncVersion: number = 0;
   @Watch('onLogout') @StorageLink('logoutVersion') logoutVersion: number = 0;
+  private tabsController: HdsTabsController = new HdsTabsController();
 
   aboutToAppear(): void {
     this.checkLogin();
     this.applyAutoSync();
-    this.updateLayout();
   }
 
   onPageShow(): void {
     this.checkLogin();
     this.applyAutoSync();
-    this.updateLayout();
   }
 
   private async checkLogin(): Promise<void> {
@@ -51,9 +49,16 @@ struct Index {
     this.applyAutoSync();
   }
 
-  private updateLayout(): void {
-    const w = display.getDefaultDisplaySync().width;
-    this.wide = w >= 840;
+  /** HdsTabs 悬浮样式：液态玻璃沉浸材质（参考 HDS 规范）。 */
+  private buildFloatingStyle(): HdsTabsFloatingStyle {
+    return {
+      barSideMargin: 16,
+      barBottomMargin: 16,
+      systemMaterialEffect: {
+        materialType: hdsMaterial.MaterialType.IMMERSIVE,
+        materialLevel: hdsMaterial.MaterialLevel.ADAPTIVE
+      }
+    };
   }
 
   @Builder
@@ -87,35 +92,27 @@ struct Index {
     .justifyContent(FlexAlign.Center)
   }
 
+  /** HDS Tab 项：SymbolGlyph 图标 + 文字，选中 accent 色。 */
   @Builder
-  TabBar() {
-    Row() {
-      this.TabItem(0, $r('app.string.tab_home'))
-      this.TabItem(1, $r('app.string.tab_stats'))
-      this.TabItem(2, $r('app.string.tab_records'))
-      this.TabItem(3, $r('app.string.tab_settings'))
-      this.TabItem(4, $r('app.string.tab_about'))
-    }
-    .width('100%')
-    .height(56)
-    .backgroundColor($r('app.color.bg_card'))
-  }
-
-  @Builder
-  TabItem(index: number, label: ResourceStr) {
-    Column({ space: 2 }) {
-      Text(index === 0 ? '◧' : index === 1 ? '◬' : index === 2 ? '▤' : index === 3 ? '⚙' : 'ⓘ')
-        .fontSize(20)
-        .fontColor(this.currentTab === index ? $r('app.color.accent') : $r('app.color.text_muted'))
+  tabBarContent(index: number, icon: Resource, label: ResourceStr) {
+    Column() {
+      SymbolGlyph(icon)
+        .fontSize(24)
+        .fontColor([this.currentTab === index ? $r('app.color.accent') : $r('app.color.text_muted')])
       Text(label)
         .fontSize(11)
+        .fontWeight(this.currentTab === index ? FontWeight.Bold : FontWeight.Medium)
         .fontColor(this.currentTab === index ? $r('app.color.accent') : $r('app.color.text_muted'))
+        .maxLines(1)
+        .textOverflow({ overflow: TextOverflow.Ellipsis })
+        .margin({ top: 2 })
     }
-    .layoutWeight(1)
-    .height('100%')
     .justifyContent(FlexAlign.Center)
+    .alignItems(HorizontalAlign.Center)
+    .width('100%')
+    .height('100%')
     .onClick(() => {
-      this.currentTab = index;
+      this.tabsController.changeIndex(index);
     })
   }
 
@@ -123,55 +120,49 @@ struct Index {
     if (!this.loggedIn) {
       this.WelcomePage();
     } else {
-      Row() {
-        if (this.wide) {
-          // 平板：左侧导航栏
-          Column() {
-            ForEach([$r('app.string.tab_home'), $r('app.string.tab_stats'), $r('app.string.tab_records'),
-              $r('app.string.tab_settings'), $r('app.string.tab_about')], (item: Resource, i: number) => {
-              Text(item)
-                .fontSize(16)
-                .fontColor(this.currentTab === i ? $r('app.color.accent') : $r('app.color.text_secondary'))
-                .padding(12)
-                .width('100%')
-                .onClick(() => { this.currentTab = i; })
-            }, (item: Resource, i: number) => `nav_${i}`)
-          }
-          .width(180)
-          .height('100%')
-          .backgroundColor($r('app.color.bg_card'))
-
-          this.MainArea()
-        } else {
-          Column() {
-            this.MainArea()
-            this.TabBar()
-          }
-          .width('100%')
-          .height('100%')
+      HdsTabs({
+        barPosition: BarPosition.End,
+        index: this.currentTab,
+        controller: this.tabsController
+      }) {
+        TabContent() {
+          DashboardPage()
         }
+        .tabBar(this.tabBarContent(0, $r('sys.symbol.house'), $r('app.string.tab_home')))
+
+        TabContent() {
+          StatsPage()
+        }
+        .tabBar(this.tabBarContent(1, $r('sys.symbol.chart_bar'), $r('app.string.tab_stats')))
+
+        TabContent() {
+          RecordsPage()
+        }
+        .tabBar(this.tabBarContent(2, $r('sys.symbol.list_bullet'), $r('app.string.tab_records')))
+
+        TabContent() {
+          SettingsPage()
+        }
+        .tabBar(this.tabBarContent(3, $r('sys.symbol.gearshape'), $r('app.string.tab_settings')))
+
+        TabContent() {
+          AboutPage()
+        }
+        .tabBar(this.tabBarContent(4, $r('sys.symbol.info'), $r('app.string.tab_about')))
       }
+      .barHeight(62)
+      .barOverlap(true)
+      .barBackgroundColor(Color.Transparent)
+      .barBackgroundBlurStyle(BlurStyle.COMPONENT_THIN)
+      .barFloatingStyle(this.buildFloatingStyle())
+      .backgroundColor($r('app.color.bg_page'))
+      .scrollable(false)
+      .animationDuration(0)
+      .onChange((index: number) => {
+        this.currentTab = index;
+      })
       .width('100%')
       .height('100%')
     }
-  }
-
-  @Builder
-  MainArea() {
-    Column() {
-      if (this.currentTab === 0) {
-        DashboardPage()
-      } else if (this.currentTab === 1) {
-        StatsPage()
-      } else if (this.currentTab === 2) {
-        RecordsPage()
-      } else if (this.currentTab === 3) {
-        SettingsPage()
-      } else {
-        AboutPage()
-      }
-    }
-    .layoutWeight(1)
-    .width('100%')
   }
 }
