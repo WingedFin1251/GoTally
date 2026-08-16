@@ -9,9 +9,9 @@ export struct SettingRow {
   build() {
     Row({ space: 10 }) {
       Column({ space: 2 }) {
-        Text(this.title).fontSize(14).fontColor($r('app.color.text_primary'))
+        Text(this.title).fontSize(14).fontColor($r('app.color.text_primary')).maxLines(1)
         if (this.desc !== '') {
-          Text(this.desc).fontSize(11).fontColor($r('app.color.text_muted'))
+          Text(this.desc).fontSize(11).fontColor($r('app.color.text_muted')).maxLines(1).textOverflow({ overflow: TextOverflow.Ellipsis })
         }
       }
       .alignItems(HorizontalAlign.Start)

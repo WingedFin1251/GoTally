@@ -43,6 +43,8 @@
     { "name": "today_trend", "value": "今日趋势" },
     { "name": "hours_24", "value": "24 小时" },
     { "name": "input", "value": "输入" },
+    { "name": "total_input", "value": "总输入" },
+    { "name": "uncached_input", "value": "未缓存输入" },
     { "name": "output", "value": "输出" },
     { "name": "reasoning", "value": "推理" },
     { "name": "cache_read", "value": "缓存读" },
@@ -57,6 +59,7 @@
     { "name": "total_tokens", "value": "总Token" },
 
     { "name": "records_page", "value": "使用记录" },
+    { "name": "records_count_hint", "value": "共 {0} 条" },
     { "name": "session_usage", "value": "会话用量" },
     { "name": "usage_records", "value": "使用记录" },
     { "name": "all_models", "value": "全部模型" },

@@ -1,4 +1,6 @@
 // entry/src/main/ets/components/charts/BarChart.ets
+import { formatCompact } from '../../common/utils/Formatter';
+import { isZh } from '../../common/utils/Locale';
 
 @Component
 export struct BarChart {
@@ -57,7 +59,7 @@ export struct BarChart {
       this.ctx.stroke();
       this.ctx.globalAlpha = 1;
       const val = Math.round(max * g / 4);
-      this.ctx.fillText(`${val}`, 4, gy + 3);
+      this.ctx.fillText(formatCompact(val, isZh()), 4, gy + 3);
     }
     // 柱子
     for (let i = 0; i < n; i++) {
@@ -67,11 +69,13 @@ export struct BarChart {
       const c = this.colors.length > 0 ? this.colors[i % this.colors.length] : '#888888';
       this.ctx.fillStyle = c;
       this.ctx.fillRect(x, y, bw, barH);
-      // 标签
-      this.ctx.fillStyle = this.textColor;
-      if (i % Math.max(1, Math.floor(n / 8)) === 0) {
-        this.ctx.fillText(this.labels[i] ?? '', x, h - 8);
-      }
+    }
+    // X 标签（抽样居中显示，避免重叠）
+    this.ctx.fillStyle = this.textColor;
+    this.ctx.textAlign = 'center';
+    const labelStep = Math.max(1, Math.floor(n / 6));
+    for (let i = 0; i < n; i += labelStep) {
+      this.ctx.fillText(this.labels[i] ?? '', padL + i * slot + slot / 2, h - 8);
     }
   }
 
