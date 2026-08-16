@@ -4,6 +4,12 @@ import type { UsageRecord, SyncState } from '../model/UsageRecord';
 import type { Totals, ModelStat, DailyStat, TrendPoint, SessionStat, RecordRow } from '../model/Stats';
 import { Constants } from '../common/constants/Constants';
 
+interface HourBucket {
+  input: number;
+  output: number;
+  reasoning: number;
+}
+
 function seedRecords(): UsageRecord[] {
   const out: UsageRecord[] = [];
   const models: string[] = ['gpt-4o', 'claude-opus-4', 'deepseek-chat', 'glm-4-plus', 'qwen-max'];
@@ -111,11 +117,15 @@ export class MockRepository implements UsageStore {
       s.totalCostUsd += r.costUsd;
       if (r.createdAt > s.lastAt) { s.lastAt = r.createdAt; }
     }
-    const all = [...map.values()];
+    const all = Array.from(map.values());
     all.sort((a, b) => b.lastAt.localeCompare(a.lastAt));
     const total = all.length;
     const start = (page - 1) * pageSize;
-    const rows = all.slice(start, start + pageSize).map((s) => ({ ...s, totalCostUsd: Number(s.totalCostUsd.toFixed(6)) }));
+    const rows = all.slice(start, start + pageSize).map((s): SessionStat => ({
+      sessionId: s.sessionId, requestCount: s.requestCount, totalInputTokens: s.totalInputTokens,
+      uncachedInputTokens: s.uncachedInputTokens, totalOutputTokens: s.totalOutputTokens,
+      totalReasoningTokens: s.totalReasoningTokens, totalCostUsd: Number(s.totalCostUsd.toFixed(6)), lastAt: s.lastAt,
+    }));
     return [rows, total];
   }
 
@@ -126,7 +136,7 @@ export class MockRepository implements UsageStore {
     list = list.slice().sort((a, b) => b.createdAt.localeCompare(a.createdAt));
     const total = list.length;
     const start = (page - 1) * pageSize;
-    const rows = list.slice(start, start + pageSize).map((r) => ({
+    const rows = list.slice(start, start + pageSize).map((r): RecordRow => ({
       usgId: r.usgId, createdAt: r.createdAt, model: r.model, provider: r.provider,
       inputTokens: r.inputTokens, outputTokens: r.outputTokens, reasoningTokens: r.reasoningTokens,
       cacheReadTokens: r.cacheReadTokens, cacheWriteTokens: r.cacheWrite5mTokens + r.cacheWrite1hTokens,
@@ -135,7 +145,7 @@ export class MockRepository implements UsageStore {
     return [rows, total];
   }
 
-  async listModels(): Promise<string[]> { return [...new Set(this.records.map((r) => r.model))].sort(); }
+  async listModels(): Promise<string[]> { return Array.from(new Set(this.records.map((r) => r.model))).sort(); }
 
   private inPeriod(r: UsageRecord, period: string): boolean {
     const ms = Date.parse(r.createdAt);
@@ -198,7 +208,7 @@ export class MockRepository implements UsageStore {
       stat.totalOutputTokens += r.outputTokens;
       stat.totalCostUsd += r.costUsd;
     }
-    const out = [...map.values()];
+    const out = Array.from(map.values());
     out.sort((a, b) => (b.totalInputTokens + b.totalOutputTokens) - (a.totalInputTokens + a.totalOutputTokens));
     for (const s of out) {
       s.hitRate = s.cacheHitTokens + s.uncachedInputTokens > 0
@@ -232,7 +242,7 @@ export class MockRepository implements UsageStore {
       stat.totalCostUsd += r.costUsd;
       stat.requestCount++;
     }
-    const out = [...map.values()];
+    const out = Array.from(map.values());
     out.sort((a, b) => a.date.localeCompare(b.date));
     for (const s of out) {
       s.hitRate = s.cacheHitTokens + s.uncachedInputTokens > 0
@@ -244,7 +254,7 @@ export class MockRepository implements UsageStore {
 
   private calcTrend(): TrendPoint[] {
     const d = new Date();
-    const map = new Map<number, { input: number; output: number; reasoning: number }>();
+    const map = new Map<number, HourBucket>();
     for (const r of this.records) {
       const ms = Date.parse(r.createdAt);
       const rd = new Date(ms);

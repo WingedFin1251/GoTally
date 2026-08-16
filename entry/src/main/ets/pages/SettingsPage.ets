@@ -8,7 +8,12 @@ import type { SyncState } from '../model/UsageRecord';
 import { SettingRow } from '../components/ui/SettingRow';
 import { formatDateTime, parseIso } from '../common/utils/TimeUtil';
 import { Constants } from '../common/constants/Constants';
-import { ConfigurationConstant } from '@kit.AbilityKit';
+import { ConfigurationConstant, common } from '@kit.AbilityKit';
+
+interface PillOption {
+  value: string;
+  label: ResourceStr;
+}
 
 @Component
 export struct SettingsPage {
@@ -55,9 +60,9 @@ export struct SettingsPage {
   }
 
   @Builder
-  PillRow(options: Array<{ value: string; label: ResourceStr }>, current: string, onPick: (v: string) => void) {
+  PillRow(options: PillOption[], current: string, onPick: (v: string) => void) {
     Row({ space: 6 }) {
-      ForEach(options, (opt: { value: string; label: ResourceStr }) => {
+      ForEach(options, (opt: PillOption) => {
         Text(opt.label)
           .fontSize(11)
           .padding({ left: 8, right: 8, top: 4, bottom: 4 })
@@ -65,7 +70,7 @@ export struct SettingsPage {
           .backgroundColor(current === opt.value ? $r('app.color.accent') : $r('app.color.divider'))
           .fontColor(current === opt.value ? Color.White : $r('app.color.text_secondary'))
           .onClick(() => onPick(opt.value))
-      }, (opt: { value: string; label: ResourceStr }) => opt.value)
+      }, (opt: PillOption) => opt.value)
     }
   }
 
@@ -79,7 +84,7 @@ export struct SettingsPage {
         .width('100%')
 
         // 账户
-        this.Card($r('app.string.set_account')) {
+        this.Card($r('app.string.set_account'), () => {
           SettingRow({ title: $r('app.string.set_login_state'), desc: this.loggedIn ? $r('app.string.logged_in') : $r('app.string.not_logged_in') }) {}
           SettingRow({ title: $r('app.string.set_workspace'), desc: this.workspace }) {}
           SettingRow({ title: $r('app.string.set_login_method'), desc: $r('app.string.login_method_desc') }) {
@@ -91,10 +96,10 @@ export struct SettingsPage {
             Button($r('app.string.logout')).fontSize(12).height(30).backgroundColor($r('app.color.danger'))
               .onClick(() => this.confirmLogout())
           }
-        }
+        })
 
         // 自动同步
-        this.Card($r('app.string.set_auto_sync')) {
+        this.Card($r('app.string.set_auto_sync'), () => {
           SettingRow({ title: $r('app.string.auto_sync'), desc: $r('app.string.auto_sync_desc') }) {
             Toggle({ type: ToggleType.Switch, isOn: this.settings.autoSync })
               .onChange((v: boolean) => {
@@ -132,10 +137,10 @@ export struct SettingsPage {
               .enabled(!this.syncing)
               .onClick(() => { DataProvider.getSyncManager().sync('full'); })
           }
-        }
+        })
 
         // 外观
-        this.Card($r('app.string.set_appearance')) {
+        this.Card($r('app.string.set_appearance'), () => {
           SettingRow({ title: $r('app.string.theme'), desc: $r('app.string.theme_desc') }) {
             this.PillRow(
               [{ value: 'light', label: $r('app.string.light') }, { value: 'dark', label: $r('app.string.dark') }],
@@ -154,23 +159,23 @@ export struct SettingsPage {
               this.settings.language,
               (v: string) => { this.settings.language = v; SettingsStore.save(this.settings); promptAction.showToast({ message: '重启后生效' }); })
           }
-        }
+        })
 
         // 数据
-        this.Card($r('app.string.set_data')) {
+        this.Card($r('app.string.set_data'), () => {
           SettingRow({ title: $r('app.string.data_dir'), desc: Constants.DB_NAME }) {}
           SettingRow({ title: $r('app.string.sync_info'), desc: this.syncInfoDesc() }) {}
-        }
+        })
 
         // 更新
-        this.Card($r('app.string.set_update')) {
+        this.Card($r('app.string.set_update'), () => {
           SettingRow({ title: $r('app.string.current_version'), desc: '1.0.0' }) {}
           SettingRow({ title: $r('app.string.check_update'), desc: $r('app.string.check_update_desc') }) {
             Button($r('app.string.check_update_btn')).fontSize(12).height(30).onClick(() => {
-              promptAction.openUrl('https://github.com/yphyphyph/opencode-go-gauge/releases');
+              (getContext(this) as common.UIAbilityContext).openLink('https://github.com/yphyphyph/opencode-go-gauge/releases');
             })
           }
-        }
+        })
       }
       .padding(12)
     }
@@ -203,11 +208,10 @@ export struct SettingsPage {
   }
 
   private applyTheme(mode: string): void {
-    const ctx = this.getUIContext();
+    const ctx = getContext(this);
     const colorMode = mode === 'dark'
       ? ConfigurationConstant.ColorMode.COLOR_MODE_DARK
       : ConfigurationConstant.ColorMode.COLOR_MODE_LIGHT;
-    ctx.setColorMode(colorMode);
-    AppStorage.setOrCreate('themeVersion', (AppStorage.get('themeVersion') as number ?? 0) + 1);
+    ctx.getApplicationContext().setColorMode(colorMode);
   }
 }

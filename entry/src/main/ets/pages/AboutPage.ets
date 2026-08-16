@@ -1,5 +1,5 @@
 // entry/src/main/ets/pages/AboutPage.ets
-import { promptAction } from '@kit.ArkUI';
+import { common } from '@kit.AbilityKit';
 
 @Component
 export struct AboutPage {
@@ -40,7 +40,7 @@ export struct AboutPage {
             .fontSize(13)
             .fontColor($r('app.color.accent'))
             .onClick(() => {
-              promptAction.openUrl('https://github.com/yphyphyph/opencode-go-gauge');
+              (getContext(this) as common.UIAbilityContext).openLink('https://github.com/yphyphyph/opencode-go-gauge');
             })
         }
         .width('100%')

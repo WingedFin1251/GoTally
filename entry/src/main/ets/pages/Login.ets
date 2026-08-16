@@ -67,8 +67,12 @@ struct Login {
         .onPageBegin((event) => {
           this.loading = false;
         })
-        .onUrlLoadIntercept((event) => {
-          const url = event.data.url;
+        .onUrlLoadIntercept((event?: OnUrlLoadInterceptEvent) => {
+          if (event === undefined) {
+            return false;
+          }
+          const data = event.data;
+          const url = typeof data === 'string' ? data : data.url;
           if (url.startsWith('https://opencode.ai')) {
             this.captureAndFinish(url);
           }

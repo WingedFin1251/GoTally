@@ -184,8 +184,8 @@ export struct DashboardPage {
         this.QuotaRow()
         if (this.wide) {
           Row({ space: 12 }) {
-            this.OverviewGrid().layoutWeight(1)
-            this.TodayTrendCard().layoutWeight(1)
+            Column() { this.OverviewGrid() }.layoutWeight(1)
+            Column() { this.TodayTrendCard() }.layoutWeight(1)
           }
           .width('100%')
         } else {

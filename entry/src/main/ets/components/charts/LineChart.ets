@@ -8,10 +8,16 @@ export interface LineSeries {
 
 @Component
 export struct LineChart {
-  @Prop series: LineSeries[] = [];
+  @Watch('redraw') @Prop series: LineSeries[] = [];
   @Prop labels: string[] = [];
   private settings: RenderingContextSettings = new RenderingContextSettings(true);
   private ctx: CanvasRenderingContext2D = new CanvasRenderingContext2D(this.settings);
+
+  private redraw(): void {
+    if (this.ctx.width > 0 && this.ctx.height > 0) {
+      this.draw();
+    }
+  }
 
   private maxValue(): number {
     let m = 0;
@@ -84,7 +90,7 @@ export struct LineChart {
       .width('100%')
       .height('100%')
       .onReady(() => {
-        this.draw();
+        this.redraw();
       })
   }
 }

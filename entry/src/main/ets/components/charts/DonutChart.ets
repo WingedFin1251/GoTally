@@ -8,11 +8,17 @@ export interface DonutItem {
 
 @Component
 export struct DonutChart {
-  @Prop items: DonutItem[] = [];
+  @Watch('redraw') @Prop items: DonutItem[] = [];
   @Prop centerTitle: string = '';
   @Prop centerValue: string = '';
   private settings: RenderingContextSettings = new RenderingContextSettings(true);
   private ctx: CanvasRenderingContext2D = new CanvasRenderingContext2D(this.settings);
+
+  private redraw(): void {
+    if (this.ctx.width > 0 && this.ctx.height > 0) {
+      this.draw();
+    }
+  }
 
   private total(): number {
     let t = 0;
@@ -70,7 +76,7 @@ export struct DonutChart {
       .width('100%')
       .height('100%')
       .onReady(() => {
-        this.draw();
+        this.redraw();
       })
   }
 }

@@ -3,7 +3,18 @@ import { http } from '@kit.NetworkKit';
 import { Constants } from '../common/constants/Constants';
 import type { QuotaWindow, QuotaResult, UsageRecord, WorkspaceRef } from '../model/UsageRecord';
 
-const QUOTA_PATTERNS: Array<{ label: string; pctFirst: RegExp; resetFirst: RegExp }> = [
+interface QuotaPattern {
+  label: string;
+  pctFirst: RegExp;
+  resetFirst: RegExp;
+}
+
+interface AnchorPoint {
+  id: string;
+  start: number;
+}
+
+const QUOTA_PATTERNS: QuotaPattern[] = [
   {
     label: '5h',
     pctFirst: /rollingUsage:\s*\$R\[\d+\]\s*=\s*\{[^}]*usagePercent\s*:\s*(-?\d+(?:\.\d+)?)[^}]*resetInSec\s*:\s*(-?\d+(?:\.\d+)?)[^}]*\}/,
@@ -146,7 +157,7 @@ export class OpenCodeApi {
       plans.set(pm[1], pm[2]);
       pm = PLAN_RE.exec(text);
     }
-    const anchors: Array<{ id: string; start: number }> = [];
+    const anchors: AnchorPoint[] = [];
     let am = RECORD_ANCHOR_RE.exec(text);
     while (am !== null) {
       anchors.push({ id: am[1], start: am.index });

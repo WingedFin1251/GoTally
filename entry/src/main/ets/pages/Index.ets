@@ -15,7 +15,6 @@ struct Index {
   @State currentTab: number = 0;
   @State loggedIn: boolean = false;
   @State wide: boolean = false;
-  @StorageLink('themeVersion') themeVersion: number = 0;
   @Watch('applyAutoSync') @StorageLink('autoSyncChanged') autoSyncVersion: number = 0;
   @Watch('onLogout') @StorageLink('logoutVersion') logoutVersion: number = 0;
 
@@ -142,10 +141,10 @@ struct Index {
           .height('100%')
           .backgroundColor($r('app.color.bg_card'))
 
-          this.MainArea().key(this.themeVersion)
+          this.MainArea()
         } else {
           Column() {
-            this.MainArea().key(this.themeVersion)
+            this.MainArea()
             this.TabBar()
           }
           .width('100%')

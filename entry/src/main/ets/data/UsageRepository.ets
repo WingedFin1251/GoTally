@@ -7,6 +7,17 @@ import type { UsageRecord, SyncState } from '../model/UsageRecord';
 import type { Totals, ModelStat, DailyStat, TrendPoint, SessionStat, RecordRow } from '../model/Stats';
 import { Constants } from '../common/constants/Constants';
 
+interface PeriodFilter {
+  where: string;
+  params: relationalStore.ValueType[];
+}
+
+interface HourBucket {
+  input: number;
+  output: number;
+  reasoning: number;
+}
+
 const rowAsUsageRecord = (rs: relationalStore.ResultSet): UsageRecord => {
   const i = (name: string): number => rs.getColumnIndex(name);
   return {
@@ -32,7 +43,7 @@ const rowAsUsageRecord = (rs: relationalStore.ResultSet): UsageRecord => {
 /** 账户 + 用量记录 + 同步状态的 RDB 实现，并承载全部聚合查询。 */
 export class UsageRepository implements UsageStore {
   // ---- 周期过滤（对齐 db.py _period_where） ----
-  private static periodWhere(period: string): [string, relationalStore.ValueType[]] {
+  private static periodWhere(period: string): PeriodFilter {
     let clause = '';
     const params: relationalStore.ValueType[] = [];
     if (period === Constants.PERIOD_TODAY) {
@@ -45,7 +56,7 @@ export class UsageRepository implements UsageStore {
       clause = `datetime(created_at) >= datetime('now', ?)`;
       params.push(`-${days} days`);
     }
-    return [clause === '' ? '' : `WHERE ${clause}`, params];
+    return { where: clause === '' ? '' : `WHERE ${clause}`, params: params };
   }
 
   private static hitRate(hit: number, miss: number): number {
@@ -242,7 +253,7 @@ export class UsageRepository implements UsageStore {
 
   // ---- 聚合 ----
   async totals(period: string): Promise<Totals> {
-    const [where, params] = UsageRepository.periodWhere(period);
+    const f = UsageRepository.periodWhere(period);
     const store = await RdbHelper.getStore();
     const rs = await store.querySql(
       `SELECT COUNT(*) AS request_count,
@@ -254,7 +265,7 @@ export class UsageRepository implements UsageStore {
               SUM(cache_write_5m_tokens + cache_write_1h_tokens) AS cache_write_tokens,
               SUM(output_tokens) AS total_output_tokens,
               SUM(cost_usd) AS total_cost_usd
-       FROM usage_records ${where}`, params);
+       FROM usage_records ${f.where}`, f.params);
     const out: Totals = {
       requestCount: 0, sessionCount: 0, totalInputTokens: 0, uncachedInputTokens: 0,
       totalReasoningTokens: 0, cacheHitTokens: 0, cacheWriteTokens: 0,
@@ -279,7 +290,7 @@ export class UsageRepository implements UsageStore {
   }
 
   async modelStats(period: string): Promise<ModelStat[]> {
-    const [where, params] = UsageRepository.periodWhere(period);
+    const f = UsageRepository.periodWhere(period);
     const store = await RdbHelper.getStore();
     const rs = await store.querySql(
       `SELECT model,
@@ -292,9 +303,9 @@ export class UsageRepository implements UsageStore {
               SUM(cache_write_5m_tokens + cache_write_1h_tokens) AS cache_write_tokens,
               SUM(output_tokens) AS total_output_tokens,
               SUM(cost_usd) AS total_cost_usd
-       FROM usage_records ${where}
+       FROM usage_records ${f.where}
        GROUP BY model
-       ORDER BY (SUM(input_tokens + cache_read_tokens + cache_write_5m_tokens + cache_write_1h_tokens) + SUM(output_tokens)) DESC`, params);
+       ORDER BY (SUM(input_tokens + cache_read_tokens + cache_write_5m_tokens + cache_write_1h_tokens) + SUM(output_tokens)) DESC`, f.params);
     const out: ModelStat[] = [];
     while (rs.goToNextRow()) {
       const l = (n: string): number => rs.getLong(rs.getColumnIndex(n));
@@ -368,7 +379,7 @@ export class UsageRepository implements UsageStore {
        FROM usage_records
        WHERE substr(datetime(created_at, 'localtime'), 1, 10) = date('now', 'localtime')
        GROUP BY h`);
-    const byHour = new Map<number, { input: number; output: number; reasoning: number }>();
+    const byHour = new Map<number, HourBucket>();
     while (rs.goToNextRow()) {
       const h = rs.getLong(rs.getColumnIndex('h'));
       byHour.set(h, {

@@ -166,7 +166,6 @@ export struct StatsPage {
           centerTitle: '总Token',
           centerValue: formatTokens(this.vm.totals.totalInputTokens + this.vm.totals.totalOutputTokens + this.vm.totals.totalReasoningTokens),
         })
-          .key(this.chartVersion)
           .width(160)
           .height(160)
 
@@ -222,7 +221,6 @@ export struct StatsPage {
         series: this.trendSeries(),
         labels: this.trendLabels(),
       })
-        .key(this.chartVersion)
         .width('100%')
         .height(240)
     }
@@ -246,8 +244,8 @@ export struct StatsPage {
         this.TokenDetail()
         if (this.wide) {
           Row({ space: 12 }) {
-            this.ModelRank().layoutWeight(1)
-            this.TrendCard().layoutWeight(1)
+            Column() { this.ModelRank() }.layoutWeight(1)
+            Column() { this.TrendCard() }.layoutWeight(1)
           }
           .width('100%')
         } else {

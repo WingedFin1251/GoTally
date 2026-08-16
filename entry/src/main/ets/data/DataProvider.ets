@@ -10,12 +10,14 @@ import type { UsageAggregator } from '../model/Stats';
 import { SyncManager } from '../network/SyncManager';
 import { SettingsStore } from './SettingsStore';
 
-const realFetcher: UsageFetcher = {
-  fetchUsagePage: async (ws: string, page: number, keyId?: string): Promise<UsageRecord[]> => {
+class RealFetcher implements UsageFetcher {
+  async fetchUsagePage(ws: string, page: number, keyId?: string): Promise<UsageRecord[]> {
     const token = await DataProvider.getStore().getToken();
     return OpenCodeApi.fetchUsagePage(token, ws, page, keyId ?? '');
-  },
-};
+  }
+}
+
+const realFetcher: UsageFetcher = new RealFetcher();
 
 /** 统一入口：按 Constants.USE_MOCK_DATA 返回真实或 Mock 实现。 */
 export class DataProvider {
@@ -31,7 +33,7 @@ export class DataProvider {
   }
 
   static getAggregator(): UsageAggregator {
-    return DataProvider.getStore() as unknown as UsageAggregator;
+    return DataProvider.getStore() as UsageAggregator;
   }
 
   static getFetcher(): UsageFetcher {

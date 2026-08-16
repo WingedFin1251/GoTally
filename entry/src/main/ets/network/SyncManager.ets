@@ -13,13 +13,21 @@ export interface SyncProgress {
   message: string;
 }
 
+export interface SyncResult {
+  ok: boolean;
+  error?: string;
+  inserted?: number;
+  partial?: boolean;
+  failedPages?: number;
+}
+
 const IDLE_PROGRESS: SyncProgress = { running: false, mode: '', page: 0, inserted: 0, phase: 'idle', message: '' };
 
 /** 同步状态机：增量/全量拉取、去重写入、窗口裁剪、进度回调。 */
 export class SyncManager {
   private store: UsageStore;
   private fetcher: UsageFetcher;
-  private progress: SyncProgress = { ...IDLE_PROGRESS };
+  private progress: SyncProgress = SyncManager.copyProgress(IDLE_PROGRESS);
   private busy = false;
   private timer: number | null = null;
   private intervalProvider: () => Promise<number>;
@@ -38,7 +46,11 @@ export class SyncManager {
   }
 
   getProgress(): SyncProgress {
-    return { ...this.progress };
+    return SyncManager.copyProgress(this.progress);
+  }
+
+  private static copyProgress(p: SyncProgress): SyncProgress {
+    return { running: p.running, mode: p.mode, page: p.page, inserted: p.inserted, phase: p.phase, message: p.message };
   }
 
   private setPhase(phase: string, message: string): void {
@@ -48,7 +60,7 @@ export class SyncManager {
     this.onProgress(this.getProgress());
   }
 
-  async sync(mode: 'incremental' | 'full'): Promise<{ ok: boolean; error?: string; inserted?: number; partial?: boolean; failedPages?: number }> {
+  async sync(mode: 'incremental' | 'full'): Promise<SyncResult> {
     const token = await this.store.getToken();
     if (token.trim() === '') {
       return { ok: false, error: '未登录' };
@@ -186,7 +198,7 @@ export class SyncManager {
         return;
       }
       this.sync('incremental');
-    }, intervalSec * 1000) as unknown as number;
+    }, intervalSec * 1000) as number;
   }
 
   stopAutoSync(): void {
