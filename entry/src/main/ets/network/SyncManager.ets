@@ -2,6 +2,7 @@
 import { Constants } from '../common/constants/Constants';
 import type { UsageStore } from '../data/UsageStore';
 import type { UsageFetcher } from './UsageFetcher';
+import type { UsageRecord } from '../model/UsageRecord';
 
 export interface SyncProgress {
   running: boolean;
@@ -170,6 +171,6 @@ export class SyncManager {
 }
 
 interface UsageRecordOrError {
-  records: import('../model/UsageRecord').UsageRecord[];
+  records: UsageRecord[];
   error?: string;
 }
