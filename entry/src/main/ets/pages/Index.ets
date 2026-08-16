@@ -4,6 +4,7 @@ import { display } from '@kit.ArkUI';
 import { DataProvider } from '../data/DataProvider';
 import { DashboardPage } from './DashboardPage';
 import { StatsPage } from './StatsPage';
+import { RecordsPage } from './RecordsPage';
 
 @Entry
 @Component
@@ -152,7 +153,7 @@ struct Index {
       } else if (this.currentTab === 1) {
         StatsPage()
       } else if (this.currentTab === 2) {
-        this.TabContentPlaceholder('记录占位')
+        RecordsPage()
       } else if (this.currentTab === 3) {
         this.TabContentPlaceholder('设置占位')
       } else {

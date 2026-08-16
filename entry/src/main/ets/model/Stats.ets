@@ -80,4 +80,7 @@ export interface UsageAggregator {
   modelStats(period: string): Promise<ModelStat[]>;
   todayTrend(): Promise<TrendPoint[]>;
   dailyStats(days: number): Promise<DailyStat[]>;
+  sessionStatsPage(page: number, pageSize: number, days: number | null): Promise<[SessionStat[], number]>;
+  usageRecordsPage(page: number, pageSize: number, model: string | null, days: number | null): Promise<[RecordRow[], number]>;
+  listModels(): Promise<string[]>;
 }

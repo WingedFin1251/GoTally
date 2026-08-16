@@ -84,8 +84,48 @@ export class MockRepository implements UsageStore {
   async modelStats(period: string): Promise<ModelStat[]> { return this.calcModels(period); }
   async dailyStats(days: number): Promise<DailyStat[]> { return this.calcDaily(days); }
   async todayTrend(): Promise<TrendPoint[]> { return this.calcTrend(); }
-  async sessionStatsPage(page: number, pageSize: number, days: number | null): Promise<[SessionStat[], number]> { return [[], 0]; }
-  async usageRecordsPage(page: number, pageSize: number, model: string | null, days: number | null): Promise<[RecordRow[], number]> { return [[], 0]; }
+  async sessionStatsPage(page: number, pageSize: number, days: number | null): Promise<[SessionStat[], number]> {
+    const dayMs = days !== null && days > 0 ? days * 86400 * 1000 : Number.MAX_SAFE_INTEGER;
+    const map = new Map<string, SessionStat>();
+    for (const r of this.records) {
+      if (Date.now() - Date.parse(r.createdAt) > dayMs) { continue; }
+      let s = map.get(r.sessionId);
+      if (s === undefined) {
+        s = { sessionId: r.sessionId, requestCount: 0, totalInputTokens: 0, uncachedInputTokens: 0, totalOutputTokens: 0, totalReasoningTokens: 0, totalCostUsd: 0, lastAt: r.createdAt };
+        map.set(r.sessionId, s);
+      }
+      s.requestCount++;
+      s.totalInputTokens += r.inputTokens + r.cacheReadTokens + r.cacheWrite5mTokens + r.cacheWrite1hTokens;
+      s.uncachedInputTokens += r.inputTokens;
+      s.totalOutputTokens += r.outputTokens;
+      s.totalReasoningTokens += r.reasoningTokens;
+      s.totalCostUsd += r.costUsd;
+      if (r.createdAt > s.lastAt) { s.lastAt = r.createdAt; }
+    }
+    const all = [...map.values()];
+    all.sort((a, b) => b.lastAt.localeCompare(a.lastAt));
+    const total = all.length;
+    const start = (page - 1) * pageSize;
+    const rows = all.slice(start, start + pageSize).map((s) => ({ ...s, totalCostUsd: Number(s.totalCostUsd.toFixed(6)) }));
+    return [rows, total];
+  }
+
+  async usageRecordsPage(page: number, pageSize: number, model: string | null, days: number | null): Promise<[RecordRow[], number]> {
+    const dayMs = days !== null && days > 0 ? days * 86400 * 1000 : Number.MAX_SAFE_INTEGER;
+    let list = this.records.filter((r) => model === null || model === '' || r.model === model);
+    list = list.filter((r) => Date.now() - Date.parse(r.createdAt) <= dayMs);
+    list = list.slice().sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+    const total = list.length;
+    const start = (page - 1) * pageSize;
+    const rows = list.slice(start, start + pageSize).map((r) => ({
+      usgId: r.usgId, createdAt: r.createdAt, model: r.model, provider: r.provider,
+      inputTokens: r.inputTokens, outputTokens: r.outputTokens, reasoningTokens: r.reasoningTokens,
+      cacheReadTokens: r.cacheReadTokens, cacheWriteTokens: r.cacheWrite5mTokens + r.cacheWrite1hTokens,
+      costUsd: r.costUsd, sessionId: r.sessionId, plan: r.plan,
+    }));
+    return [rows, total];
+  }
+
   async listModels(): Promise<string[]> { return [...new Set(this.records.map((r) => r.model))].sort(); }
 
   private inPeriod(r: UsageRecord, period: string): boolean {
