@@ -45,6 +45,6 @@ export class Constants {
   static readonly PERIOD_TODAY: string = 'today';
   static readonly PERIOD_ALL: string = 'all';
 
-  // Mock 开关：开发用 true（数据层返回示例数据），发布前置 false
-  static readonly USE_MOCK_DATA: boolean = true;
+  // Mock 开关：开发用 true（数据层返回示例数据，免账号调试 UI）；真实登录/同步必须 false
+  static readonly USE_MOCK_DATA: boolean = false;
 }
