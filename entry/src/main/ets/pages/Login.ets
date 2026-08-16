@@ -67,7 +67,7 @@ struct Login {
         .onPageBegin((event) => {
           this.loading = false;
         })
-        .onUrlLoadIntercept((event?: OnUrlLoadInterceptEvent) => {
+        .onUrlLoadIntercept((event) => {
           if (event === undefined) {
             return false;
           }

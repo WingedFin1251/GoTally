@@ -24,7 +24,7 @@ export class RecordsViewModel {
     const result = await agg.sessionStatsPage(this.sessionPage, SESSION_PAGE_SIZE, null);
     this.sessions = result[0];
     this.sessionTotal = result[1];
-    const totalPages = Math.ceil(total / SESSION_PAGE_SIZE);
+    const totalPages = Math.ceil(this.sessionTotal / SESSION_PAGE_SIZE);
     this.sessionPage = Math.min(this.sessionPage, Math.max(1, totalPages));
   }
 
@@ -34,7 +34,7 @@ export class RecordsViewModel {
     const result = await agg.usageRecordsPage(this.recordPage, RECORD_PAGE_SIZE, this.selectedModel === '' ? null : this.selectedModel, null);
     this.records = result[0];
     this.recordTotal = result[1];
-    const totalPages = Math.ceil(total / RECORD_PAGE_SIZE);
+    const totalPages = Math.ceil(this.recordTotal / RECORD_PAGE_SIZE);
     this.recordPage = Math.min(this.recordPage, Math.max(1, totalPages));
     const models = await agg.listModels();
     this.models = models;

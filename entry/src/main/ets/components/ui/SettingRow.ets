@@ -4,7 +4,7 @@ export struct SettingRow {
   // ResourceStr = string | Resource，兼容 $r() 资源与计算字符串
   @Prop title: ResourceStr = '';
   @Prop desc: ResourceStr = '';
-  @BuilderParam content: () => void = () => {};
+  @BuilderParam content: () => void;
 
   build() {
     Row({ space: 10 }) {

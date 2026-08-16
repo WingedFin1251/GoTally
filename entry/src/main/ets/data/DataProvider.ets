@@ -1,6 +1,6 @@
 // entry/src/main/ets/data/DataProvider.ets
 import { Constants } from '../common/constants/Constants';
-import type { UsageStore } from './UsageStore';
+import type { UsageDataStore } from './UsageStore';
 import { UsageRepository } from './UsageRepository';
 import { MockRepository } from './MockRepository';
 import type { UsageFetcher } from '../network/UsageFetcher';
@@ -21,11 +21,11 @@ const realFetcher: UsageFetcher = new RealFetcher();
 
 /** 统一入口：按 Constants.USE_MOCK_DATA 返回真实或 Mock 实现。 */
 export class DataProvider {
-  private static store: UsageStore | null = null;
+  private static store: UsageDataStore | null = null;
   private static fetcher: UsageFetcher | null = null;
   private static sync: SyncManager | null = null;
 
-  static getStore(): UsageStore {
+  static getStore(): UsageDataStore {
     if (DataProvider.store === null) {
       DataProvider.store = Constants.USE_MOCK_DATA ? new MockRepository() : new UsageRepository();
     }
@@ -33,7 +33,7 @@ export class DataProvider {
   }
 
   static getAggregator(): UsageAggregator {
-    return DataProvider.getStore() as UsageAggregator;
+    return DataProvider.getStore();
   }
 
   static getFetcher(): UsageFetcher {
