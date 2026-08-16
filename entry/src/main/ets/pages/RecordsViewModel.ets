@@ -17,11 +17,16 @@ export class RecordsViewModel {
 
   models: string[] = [];
   selectedModel = '';
+  period: string = 'today';
+
+  setPeriod(p: string): void {
+    this.period = p;
+  }
 
   async loadSessions(page: number): Promise<void> {
     this.sessionPage = Math.max(1, page);
     const agg = DataProvider.getAggregator();
-    const result = await agg.sessionStatsPage(this.sessionPage, SESSION_PAGE_SIZE, null);
+    const result = await agg.sessionStatsPage(this.sessionPage, SESSION_PAGE_SIZE, this.period);
     this.sessions = result[0];
     this.sessionTotal = result[1];
     const totalPages = Math.ceil(this.sessionTotal / SESSION_PAGE_SIZE);
@@ -31,7 +36,7 @@ export class RecordsViewModel {
   async loadRecords(page: number): Promise<void> {
     this.recordPage = Math.max(1, page);
     const agg = DataProvider.getAggregator();
-    const result = await agg.usageRecordsPage(this.recordPage, RECORD_PAGE_SIZE, this.selectedModel === '' ? null : this.selectedModel, null);
+    const result = await agg.usageRecordsPage(this.recordPage, RECORD_PAGE_SIZE, this.selectedModel === '' ? null : this.selectedModel, this.period);
     this.records = result[0];
     this.recordTotal = result[1];
     const totalPages = Math.ceil(this.recordTotal / RECORD_PAGE_SIZE);

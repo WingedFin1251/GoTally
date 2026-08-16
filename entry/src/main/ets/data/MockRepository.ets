@@ -99,11 +99,10 @@ export class MockRepository implements UsageDataStore {
   async modelStats(period: string): Promise<ModelStat[]> { return this.calcModels(period); }
   async dailyStats(days: number): Promise<DailyStat[]> { return this.calcDaily(days); }
   async todayTrend(): Promise<TrendPoint[]> { return this.calcTrend(); }
-  async sessionStatsPage(page: number, pageSize: number, days: number | null): Promise<[SessionStat[], number]> {
-    const dayMs = days !== null && days > 0 ? days * 86400 * 1000 : Number.MAX_SAFE_INTEGER;
+  async sessionStatsPage(page: number, pageSize: number, period: string): Promise<[SessionStat[], number]> {
     const map = new Map<string, SessionStat>();
     for (const r of this.records) {
-      if (Date.now() - Date.parse(r.createdAt) > dayMs) { continue; }
+      if (!this.inPeriod(r, period)) { continue; }
       let s = map.get(r.sessionId);
       if (s === undefined) {
         s = { sessionId: r.sessionId, requestCount: 0, totalInputTokens: 0, uncachedInputTokens: 0, totalOutputTokens: 0, totalReasoningTokens: 0, totalCostUsd: 0, lastAt: r.createdAt };
@@ -129,10 +128,9 @@ export class MockRepository implements UsageDataStore {
     return [rows, total];
   }
 
-  async usageRecordsPage(page: number, pageSize: number, model: string | null, days: number | null): Promise<[RecordRow[], number]> {
-    const dayMs = days !== null && days > 0 ? days * 86400 * 1000 : Number.MAX_SAFE_INTEGER;
-    let list = this.records.filter((r) => model === null || model === '' || r.model === model);
-    list = list.filter((r) => Date.now() - Date.parse(r.createdAt) <= dayMs);
+  async usageRecordsPage(page: number, pageSize: number, model: string | null, period: string): Promise<[RecordRow[], number]> {
+    let list = this.records.filter((r) => this.inPeriod(r, period));
+    list = list.filter((r) => model === null || model === '' || r.model === model);
     list = list.slice().sort((a, b) => b.createdAt.localeCompare(a.createdAt));
     const total = list.length;
     const start = (page - 1) * pageSize;
@@ -170,7 +168,7 @@ export class MockRepository implements UsageDataStore {
     let totalInput = 0, uncachedInput = 0, reasoning = 0, hit = 0, write = 0, output = 0, cost = 0;
     for (const r of recs) {
       requestCount++;
-      if (r.sessionId !== '') { sessions.add(r.sessionId); }
+      if (r.sessionId !== '') { sessions.add(r.sessionId); } else { sessions.add(''); }
       totalInput += r.inputTokens + r.cacheReadTokens + r.cacheWrite5mTokens + r.cacheWrite1hTokens;
       uncachedInput += r.inputTokens;
       reasoning += r.reasoningTokens;

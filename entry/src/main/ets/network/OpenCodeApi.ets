@@ -61,6 +61,15 @@ function parseStrField(body: string, name: string): string {
   return m !== null ? m[1] : '';
 }
 
+/** 归一化 ISO 时间：缺时区标记时按 UTC 处理（补 Z），保证展示与统计统一换算为设备本地时区。 */
+export function normalizeIso(iso: string): string {
+  const t = iso.trim();
+  if (t === '') {
+    return t;
+  }
+  return /(?:Z|[+-]\d{2}:\d{2})$/.test(t) ? t : `${t}Z`;
+}
+
 /** OpenCode Go API 客户端：配额/用量/工作区，含网络与纯解析。 */
 export class OpenCodeApi {
 
@@ -175,7 +184,7 @@ export class OpenCodeApi {
       const costRaw = parseNumField(body, 'cost');
       records.push({
         usgId: anchor.id,
-        createdAt: created[1],
+        createdAt: normalizeIso(created[1]),
         model: parseStrField(body, 'model'),
         provider: parseStrField(body, 'provider'),
         inputTokens: parseNumField(body, 'inputTokens'),

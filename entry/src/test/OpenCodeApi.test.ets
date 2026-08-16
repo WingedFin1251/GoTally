@@ -1,6 +1,6 @@
 // entry/src/test/OpenCodeApi.test.ets
 import { describe, it, expect } from '@ohos/hypium';
-import { OpenCodeApi } from '../main/ets/network/OpenCodeApi';
+import { OpenCodeApi, normalizeIso } from '../main/ets/network/OpenCodeApi';
 
 const QUOTA_HTML: string = `
   rollingUsage: $R[3] = { resetInSec: 12345, usagePercent: 42.5 }
@@ -46,6 +46,12 @@ export default function openCodeApiTest() {
     it('buildCookieHeader', 0, () => {
       expect(OpenCodeApi.buildCookieHeader('abc123')).assertEqual('auth=abc123');
       expect(OpenCodeApi.buildCookieHeader('Cookie: foo=1; auth=xyz')).assertEqual('auth=xyz');
+    });
+    it('normalizeIso', 0, () => {
+      expect(normalizeIso('2026-08-16T09:00:00')).assertEqual('2026-08-16T09:00:00Z');
+      expect(normalizeIso('2026-08-16T09:00:00Z')).assertEqual('2026-08-16T09:00:00Z');
+      expect(normalizeIso('2026-08-16T09:00:00+08:00')).assertEqual('2026-08-16T09:00:00+08:00');
+      expect(normalizeIso('')).assertEqual('');
     });
     it('extractWorkspaceId', 0, () => {
       expect(OpenCodeApi.extractWorkspaceId('wrk_abc123')).assertEqual('wrk_abc123');

@@ -44,15 +44,23 @@ class FakeStore implements UsageStore {
   async clearAccount(): Promise<void> { this.records = []; }
 }
 
+/** ArkTS 不允许用对象字面量初始化带方法的接口，改用类实现。 */
+class FakeFetcher implements UsageFetcher {
+  onFetch: (workspaceId: string, page: number) => Promise<UsageRecord[]> =
+    async (): Promise<UsageRecord[]> => [];
+  async fetchUsagePage(workspaceId: string, page: number, keyId?: string): Promise<UsageRecord[]> {
+    return this.onFetch(workspaceId, page);
+  }
+}
+
 export default function syncManagerTest() {
   describe('SyncManagerTest', () => {
     it('incremental_inserts_new', 0, async () => {
       const store = new FakeStore();
-      const fetcher: UsageFetcher = {
-        fetchUsagePage: async (ws: string, page: number): Promise<UsageRecord[]> => {
-          if (page === 0) { return [mkRec(1), mkRec(2)]; }
-          return [];
-        },
+      const fetcher = new FakeFetcher();
+      fetcher.onFetch = async (ws: string, page: number): Promise<UsageRecord[]> => {
+        if (page === 0) { return [mkRec(1), mkRec(2)]; }
+        return [];
       };
       const mgr = new SyncManager(store, fetcher);
       const result = await mgr.sync('incremental');
@@ -63,17 +71,16 @@ export default function syncManagerTest() {
     it('no_token_fails', 0, async () => {
       const store = new FakeStore();
       store.token = '';
-      const mgr = new SyncManager(store, { fetchUsagePage: async () => [] });
+      const mgr = new SyncManager(store, new FakeFetcher());
       const result = await mgr.sync('incremental');
       expect(result.ok).assertFalse();
       expect(result.error).assertEqual('未登录');
     });
     it('dedupe_on_retry', 0, async () => {
       const store = new FakeStore();
-      const fetcher: UsageFetcher = {
-        fetchUsagePage: async (ws: string, page: number): Promise<UsageRecord[]> =>
-          page === 0 ? [mkRec(1)] : [],
-      };
+      const fetcher = new FakeFetcher();
+      fetcher.onFetch = async (ws: string, page: number): Promise<UsageRecord[]> =>
+        page === 0 ? [mkRec(1)] : [];
       const mgr = new SyncManager(store, fetcher);
       await mgr.sync('incremental');
       const second = await mgr.sync('incremental');

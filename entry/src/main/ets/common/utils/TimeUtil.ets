@@ -6,6 +6,31 @@ export function parseIso(iso: string): number {
   return Number.isNaN(ts) ? 0 : ts;
 }
 
+/**
+ * 规范化时间字符串为 UTC ISO（'YYYY-MM-DDTHH:MM:SS.SSSZ'）。
+ * 服务器可能返回 JS `new Date(...)` 可解析但 SQLite `datetime()` 无法解析的格式
+ * （如 'Sat Aug 16 2026 05:02:00 GMT+0000'、'...+0000'），会导致「今天/近7天」等 SQL 过滤查不到数据。
+ * 规则：缺时区标记按 UTC 处理；显式偏移（±HH:MM 或 ±HHMM）原样交给 Date.parse；无法解析则原样返回。
+ */
+export function toCanonicalIso(iso: string): string {
+  const t = iso.trim();
+  if (t === '') {
+    return t;
+  }
+  // 兼容偏移的各种写法：先去掉秒级偏移（+08:00:00 → +08:00），再把 ±HHMM 转成 ±HH:MM
+  let candidate = t.replace(/([+-]\d{2}):\d{2}:\d{2}$/, '$1:00');
+  candidate = candidate.replace(/([+-]\d{2})(\d{2})$/, '$1:$2');
+  const hasTz = /(?:Z|[+-]\d{2}:\d{2}|GMT[+-]\d{4})$/.test(candidate);
+  if (!hasTz) {
+    candidate = `${candidate}Z`;
+  }
+  const ms = Date.parse(candidate);
+  if (Number.isNaN(ms)) {
+    return iso;
+  }
+  return new Date(ms).toISOString();
+}
+
 /** 'YYYY-MM-DD HH:mm'（本地时区）。 */
 export function formatDateTime(ms: number): string {
   if (ms <= 0) {
@@ -24,6 +49,16 @@ export function formatDate(ms: number): string {
   const d = new Date(ms);
   const p = (v: number): string => (v < 10 ? `0${v}` : `${v}`);
   return `${p(d.getMonth() + 1)}-${p(d.getDate())}`;
+}
+
+/** 'MM-DD HH:mm'（本地时区，记录列表用短格式，节省列宽）。 */
+export function formatDateTimeShort(ms: number): string {
+  if (ms <= 0) {
+    return '--';
+  }
+  const d = new Date(ms);
+  const p = (v: number): string => (v < 10 ? `0${v}` : `${v}`);
+  return `${p(d.getMonth() + 1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}`;
 }
 
 /** 相对时间：刚刚 / n分钟前 / n小时前 / n天前。 */
@@ -76,4 +111,12 @@ export function formatDurationShort(totalSec: number): string {
     return `${m}m ${s}s`;
   }
   return `${s}s`;
+}
+
+/** 配额重置倒计时：超过 48h 显示「约 N 天」（zh）/「~N d」（en），否则用短格式。 */
+export function formatReset(totalSec: number, zh: boolean): string {
+  if (totalSec >= 48 * 3600) {
+    return zh ? `约 ${Math.round(totalSec / 86400)} 天` : `~${Math.round(totalSec / 86400)}d`;
+  }
+  return formatDurationShort(totalSec);
 }

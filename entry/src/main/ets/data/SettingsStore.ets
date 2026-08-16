@@ -36,13 +36,17 @@ export class SettingsStore {
   private static pref: preferences.Preferences | null = null;
 
   static async getPref(): Promise<preferences.Preferences> {
-    if (SettingsStore.pref !== null) {
-      return SettingsStore.pref;
+    try {
+      if (SettingsStore.pref !== null) {
+        return SettingsStore.pref;
+      }
+      const ctx = AppContext.get();
+      const pref = await preferences.getPreferences(ctx, Constants.PREF_NAME);
+      SettingsStore.pref = pref;
+      return pref;
+    } catch (e) {
+      throw e instanceof Error ? e : new Error(String(e));
     }
-    const ctx = AppContext.get();
-    const pref = await preferences.getPreferences(ctx, Constants.PREF_NAME);
-    SettingsStore.pref = pref;
-    return pref;
   }
 
   static async getAll(): Promise<AppSettings> {
