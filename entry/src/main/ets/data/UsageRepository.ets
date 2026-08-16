@@ -177,10 +177,9 @@ export class UsageRepository implements UsageStore {
       return 0;
     }
     const store = await RdbHelper.getStore();
-    const rs = await store.querySql(
+    await store.executeSql(
       `DELETE FROM usage_records WHERE datetime(created_at) < datetime('now', ?)`,
       [`-${windowDays} days`]);
-    rs.close();
     await this.refreshSyncTotals();
     return 0; // RDB 不直接暴露删除行数，返回 0 即可（调用方不依赖精确值）
   }
