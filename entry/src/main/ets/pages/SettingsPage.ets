@@ -30,6 +30,10 @@ export struct SettingsPage {
     };
   }
 
+  aboutToDisappear(): void {
+    DataProvider.getSyncManager().onProgress = () => {};
+  }
+
   private async load(): Promise<void> {
     this.settings = await SettingsStore.getAll();
     const token = await DataProvider.getStore().getToken();
@@ -96,6 +100,7 @@ export struct SettingsPage {
               .onChange((v: boolean) => {
                 this.settings.autoSync = v;
                 SettingsStore.save(this.settings);
+                AppStorage.setOrCreate('autoSyncChanged', (AppStorage.get('autoSyncChanged') as number ?? 0) + 1);
               })
           }
           SettingRow({ title: $r('app.string.sync_interval'), desc: $r('app.string.sync_interval_desc') }) {
@@ -107,7 +112,7 @@ export struct SettingsPage {
                 { value: '1800', label: $r('app.string.min_30') },
               ],
               `${this.settings.syncIntervalSec}`,
-              (v: string) => { this.settings.syncIntervalSec = Number(v); SettingsStore.save(this.settings); })
+              (v: string) => { this.settings.syncIntervalSec = Number(v); SettingsStore.save(this.settings); AppStorage.setOrCreate('autoSyncChanged', (AppStorage.get('autoSyncChanged') as number ?? 0) + 1); })
           }
           SettingRow({ title: $r('app.string.sync_range'), desc: $r('app.string.sync_range_desc') }) {
             this.PillRow(
@@ -119,7 +124,7 @@ export struct SettingsPage {
                 { value: 'all', label: $r('app.string.all') },
               ],
               this.settings.windowDays === null ? 'all' : `${this.settings.windowDays}`,
-              (v: string) => { this.settings.windowDays = v === 'all' ? null : Number(v); SettingsStore.save(this.settings); })
+              (v: string) => { this.settings.windowDays = v === 'all' ? null : Number(v); SettingsStore.save(this.settings); AppStorage.setOrCreate('autoSyncChanged', (AppStorage.get('autoSyncChanged') as number ?? 0) + 1); })
           }
           SettingRow({ title: $r('app.string.full_sync'), desc: this.syncProgressMsg !== '' ? this.syncProgressMsg : $r('app.string.full_sync_desc') }) {
             Button(this.syncing ? $r('app.string.syncing') : $r('app.string.start_full_sync'))
@@ -190,6 +195,7 @@ export struct SettingsPage {
       secondaryButton: {
         value: $r('app.string.ok'), action: async () => {
           await DataProvider.getStore().clearAccount();
+          AppStorage.setOrCreate('logoutVersion', (AppStorage.get('logoutVersion') as number ?? 0) + 1);
           this.load();
         },
       },

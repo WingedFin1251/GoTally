@@ -2,6 +2,7 @@
 import { router } from '@kit.ArkUI';
 import { display } from '@kit.ArkUI';
 import { DataProvider } from '../data/DataProvider';
+import { SettingsStore } from '../data/SettingsStore';
 import { DashboardPage } from './DashboardPage';
 import { StatsPage } from './StatsPage';
 import { RecordsPage } from './RecordsPage';
@@ -15,20 +16,40 @@ struct Index {
   @State loggedIn: boolean = false;
   @State wide: boolean = false;
   @StorageLink('themeVersion') themeVersion: number = 0;
+  @Watch('applyAutoSync') @StorageLink('autoSyncChanged') autoSyncVersion: number = 0;
+  @Watch('onLogout') @StorageLink('logoutVersion') logoutVersion: number = 0;
 
   aboutToAppear(): void {
     this.checkLogin();
+    this.applyAutoSync();
     this.updateLayout();
   }
 
   onPageShow(): void {
     this.checkLogin();
+    this.applyAutoSync();
     this.updateLayout();
   }
 
   private async checkLogin(): Promise<void> {
     const token = await DataProvider.getStore().getToken();
     this.loggedIn = token.trim() !== '';
+  }
+
+  /** 按 token 与自动同步开关，启动/停止同步循环。 */
+  private async applyAutoSync(): Promise<void> {
+    const token = await DataProvider.getStore().getToken();
+    if (token.trim() !== '' && await SettingsStore.getAutoSync()) {
+      DataProvider.getSyncManager().startAutoSyncLoop();
+    } else {
+      DataProvider.getSyncManager().stopAutoSync();
+    }
+  }
+
+  /** 退出登录后：回到欢迎页并停止同步循环。 */
+  private onLogout(): void {
+    this.checkLogin();
+    this.applyAutoSync();
   }
 
   private updateLayout(): void {
@@ -115,7 +136,7 @@ struct Index {
                 .padding(12)
                 .width('100%')
                 .onClick(() => { this.currentTab = i; })
-            }, (item: Resource, i: number) => `${item}_${i}`)
+            }, (item: Resource, i: number) => `nav_${i}`)
           }
           .width(180)
           .height('100%')
