@@ -41,6 +41,7 @@ class FakeStore implements UsageStore {
     this.syncState.lastSyncError = error;
   }
   async getSyncState(): Promise<SyncState> { return this.syncState; }
+  async clearAccount(): Promise<void> { this.records = []; }
 }
 
 export default function syncManagerTest() {
