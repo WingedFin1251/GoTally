@@ -92,29 +92,23 @@ export struct DashboardPage {
       }
       .width('100%')
 
-      Grid() {
-        GridItem() {
-          StatCard({ title: $r('app.string.ov_hit_rate'), value: formatPercent(this.vm.totals.hitRate), sub: '', accent: true })
+      Column({ space: 10 }) {
+        Row({ space: 10 }) {
+          StatCard({ title: $r('app.string.ov_hit_rate'), value: formatPercent(this.vm.totals.hitRate), sub: '', accent: true }).layoutWeight(1)
+          StatCard({ title: $r('app.string.ov_hits'), value: formatTokens(this.vm.totals.cacheHitTokens), sub: '', accent: false }).layoutWeight(1)
         }
-        GridItem() {
-          StatCard({ title: $r('app.string.ov_hits'), value: formatTokens(this.vm.totals.cacheHitTokens), sub: '', accent: false })
+        .width('100%')
+        Row({ space: 10 }) {
+          StatCard({ title: $r('app.string.ov_total_tokens'), value: formatTokens(this.vm.totals.totalInputTokens + this.vm.totals.totalOutputTokens + this.vm.totals.totalReasoningTokens), sub: '', accent: false }).layoutWeight(1)
+          StatCard({ title: $r('app.string.ov_requests'), value: `${this.vm.totals.requestCount}`, sub: '', accent: false }).layoutWeight(1)
         }
-        GridItem() {
-          StatCard({ title: $r('app.string.ov_total_tokens'), value: formatTokens(this.vm.totals.totalInputTokens + this.vm.totals.totalOutputTokens + this.vm.totals.totalReasoningTokens), sub: '', accent: false })
+        .width('100%')
+        Row({ space: 10 }) {
+          StatCard({ title: $r('app.string.ov_cost'), value: formatCost(this.vm.totals.totalCostUsd, this.currency, this.usdCny), sub: '', accent: false }).layoutWeight(1)
+          StatCard({ title: $r('app.string.ov_sessions'), value: `${this.vm.totals.sessionCount}`, sub: '', accent: false }).layoutWeight(1)
         }
-        GridItem() {
-          StatCard({ title: $r('app.string.ov_requests'), value: `${this.vm.totals.requestCount}`, sub: '', accent: false })
-        }
-        GridItem() {
-          StatCard({ title: $r('app.string.ov_cost'), value: formatCost(this.vm.totals.totalCostUsd, this.currency, this.usdCny), sub: '', accent: false })
-        }
-        GridItem() {
-          StatCard({ title: $r('app.string.ov_sessions'), value: `${this.vm.totals.sessionCount}`, sub: '', accent: false })
-        }
+        .width('100%')
       }
-      .columnsTemplate('1fr 1fr')
-      .rowsGap(10)
-      .columnsGap(10)
       .width('100%')
     }
     .width('100%')
