@@ -5,7 +5,7 @@ export struct BarChart {
   @Prop labels: string[] = [];
   @Prop values: number[] = [];
   @Prop colors: string[] = [];
-  @Prop version: number = 0;
+  @Watch('redraw') @Prop version: number = 0;
   private settings: RenderingContextSettings = new RenderingContextSettings(true);
   private ctx: CanvasRenderingContext2D = new CanvasRenderingContext2D(this.settings);
   @State axisColor: string = '#999999';

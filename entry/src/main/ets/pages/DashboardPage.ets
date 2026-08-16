@@ -135,9 +135,10 @@ export struct DashboardPage {
               colors: ['#2F6FED'],
               version: this.chartVersion,
             })
+              .width('100%')
               .height(180)
-              .layoutWeight(1)
           }
+          .layoutWeight(1)
         }, (t: TrendPoint) => t.hour)
       }
       .width('100%')
