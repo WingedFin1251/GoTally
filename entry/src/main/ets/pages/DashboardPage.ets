@@ -9,7 +9,6 @@ import { formatDurationShort } from '../common/utils/TimeUtil';
 import { Constants } from '../common/constants/Constants';
 import { SettingsStore } from '../data/SettingsStore';
 import { OpenCodeApi } from '../network/OpenCodeApi';
-import type { TrendPoint } from '../model/Stats';
 import type { QuotaWindow } from '../model/UsageRecord';
 
 @Component
@@ -117,6 +116,31 @@ export struct DashboardPage {
     .width('100%')
   }
 
+  /** 今日趋势：24 小时 × 输入/输出交替，共享一个 BarChart。 */
+  private trendValues(): number[] {
+    const out: number[] = [];
+    for (const t of this.vm.trend) {
+      out.push(t.input, t.output);
+    }
+    return out;
+  }
+
+  private trendColors(): string[] {
+    const out: string[] = [];
+    for (let i = 0; i < 24; i++) {
+      out.push('#2F6FED', '#34A853');
+    }
+    return out;
+  }
+
+  private trendLabels(): string[] {
+    const out: string[] = [];
+    for (const t of this.vm.trend) {
+      out.push(t.hour, '');
+    }
+    return out;
+  }
+
   @Builder
   TodayTrendCard() {
     Column({ space: 8 }) {
@@ -127,22 +151,16 @@ export struct DashboardPage {
       }
       .width('100%')
 
-      // 输入 + 输出分组柱状图（今日 24h）
+      // 输入 + 输出分组柱状图（今日 24h，共享同一比例尺）
       Row({ space: 2 }) {
-        ForEach(this.vm.trend, (t: TrendPoint) => {
-          Column() {
-            BarChart({
-              labels: [t.hour],
-              values: [t.input],
-              // Canvas fillStyle 需要真实色值字符串，用固定调色板（与 Task 9 图表一致，随主题不变）
-              colors: ['#2F6FED'],
-              version: this.chartVersion,
-            })
-              .width('100%')
-              .height(180)
-          }
-          .layoutWeight(1)
-        }, (t: TrendPoint) => t.hour)
+        BarChart({
+          labels: this.trendLabels(),
+          values: this.trendValues(),
+          colors: this.trendColors(),
+          version: this.chartVersion,
+        })
+          .width('100%')
+          .height(180)
       }
       .width('100%')
       .height(200)
