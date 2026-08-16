@@ -40,6 +40,13 @@ export struct StatsPage {
     return m.totalInputTokens;
   }
 
+  private formatDimValue(m: ModelStat): string {
+    if (this.vm.dim === 'cost') {
+      return formatCost(this.dimValue(m, 'cost'), this.currency, this.usdCny);
+    }
+    return formatTokens(this.dimValue(m, this.vm.dim));
+  }
+
   private donutItems(): DonutItem[] {
     const palette = ['#2F6FED', '#34A853', '#FBBC04', '#EA4335', '#9334E6', '#00ACC1'];
     const items: DonutItem[] = [];
@@ -168,7 +175,7 @@ export struct StatsPage {
             Row({ space: 6 }) {
               Text('●').fontSize(10).fontColor(this.modelColor(m.model))
               Text(m.model).fontSize(12).fontColor($r('app.color.text_primary')).layoutWeight(1).maxLines(1)
-              Text(formatTokens(this.dimValue(m, this.vm.dim))).fontSize(12).fontColor($r('app.color.text_secondary'))
+              Text(this.formatDimValue(m)).fontSize(12).fontColor($r('app.color.text_secondary'))
             }
             .width('100%')
           }, (m: ModelStat) => m.model)

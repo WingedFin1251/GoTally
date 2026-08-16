@@ -40,7 +40,7 @@ export struct DonutChart {
     }
     let start = -Math.PI / 2;
     for (const it of this.items) {
-      const sweep = (it.value / total) * Math.PI * 2;
+      const sweep = Math.max(0, it.value / total * Math.PI * 2);
       this.ctx.beginPath();
       this.ctx.fillStyle = it.color;
       this.ctx.moveTo(cx, cy);

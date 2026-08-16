@@ -64,7 +64,8 @@ export struct BarChart {
       const barH = this.values[i] > 0 ? (this.values[i] / max) * plotH : 1;
       const x = padL + i * slot + (slot - bw) / 2;
       const y = padT + plotH - barH;
-      this.ctx.fillStyle = this.colors[i % this.colors.length];
+      const c = this.colors.length > 0 ? this.colors[i % this.colors.length] : '#888888';
+      this.ctx.fillStyle = c;
       this.ctx.fillRect(x, y, bw, barH);
       // 标签
       this.ctx.fillStyle = this.textColor;

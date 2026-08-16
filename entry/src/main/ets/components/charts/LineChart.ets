@@ -61,7 +61,8 @@ export struct LineChart {
       this.ctx.beginPath();
       for (let i = 0; i < n; i++) {
         const x = xOf(i);
-        const y = yOf(s.values[i]);
+        const v = i < s.values.length ? s.values[i] : 0;
+        const y = yOf(v);
         if (i === 0) {
           this.ctx.moveTo(x, y);
         } else {

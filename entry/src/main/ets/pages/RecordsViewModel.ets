@@ -24,6 +24,8 @@ export class RecordsViewModel {
     const [rows, total] = await agg.sessionStatsPage(this.sessionPage, SESSION_PAGE_SIZE, null);
     this.sessions = rows;
     this.sessionTotal = total;
+    const totalPages = Math.ceil(total / SESSION_PAGE_SIZE);
+    this.sessionPage = Math.min(this.sessionPage, Math.max(1, totalPages));
   }
 
   async loadRecords(page: number): Promise<void> {
@@ -32,6 +34,8 @@ export class RecordsViewModel {
     const [rows, total] = await agg.usageRecordsPage(this.recordPage, RECORD_PAGE_SIZE, this.selectedModel === '' ? null : this.selectedModel, null);
     this.records = rows;
     this.recordTotal = total;
+    const totalPages = Math.ceil(total / RECORD_PAGE_SIZE);
+    this.recordPage = Math.min(this.recordPage, Math.max(1, totalPages));
     const models = await agg.listModels();
     this.models = models;
   }
