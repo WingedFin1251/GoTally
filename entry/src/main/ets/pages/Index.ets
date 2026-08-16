@@ -133,7 +133,7 @@ struct Index {
         TabContent() {
           StatsPage()
         }
-        .tabBar(this.tabBarContent(1, $r('sys.symbol.chart_bar'), $r('app.string.tab_stats')))
+        .tabBar(this.tabBarContent(1, $r('sys.symbol.square_grid_2x2'), $r('app.string.tab_stats')))
 
         TabContent() {
           RecordsPage()
@@ -148,7 +148,7 @@ struct Index {
         TabContent() {
           AboutPage()
         }
-        .tabBar(this.tabBarContent(4, $r('sys.symbol.info'), $r('app.string.tab_about')))
+        .tabBar(this.tabBarContent(4, $r('sys.symbol.info_circle'), $r('app.string.tab_about')))
       }
       .barHeight(62)
       .barOverlap(true)
