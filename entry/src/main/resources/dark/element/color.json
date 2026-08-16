@@ -1,8 +1,24 @@
 {
   "color": [
-    {
-      "name": "start_window_background",
-      "value": "#000000"
-    }
+    { "name": "start_window_background", "value": "#1A1A1A" },
+    { "name": "bg_page", "value": "#141414" },
+    { "name": "bg_card", "value": "#1F1F1F" },
+    { "name": "text_primary", "value": "#E8EAED" },
+    { "name": "text_secondary", "value": "#B0B0B0" },
+    { "name": "text_muted", "value": "#808080" },
+    { "name": "divider", "value": "#333333" },
+    { "name": "accent", "value": "#5B8DEF" },
+    { "name": "bar_input", "value": "#5B8DEF" },
+    { "name": "bar_output", "value": "#4CBB6C" },
+    { "name": "bar_reasoning", "value": "#E3B23C" },
+    { "name": "donut_1", "value": "#5B8DEF" },
+    { "name": "donut_2", "value": "#4CBB6C" },
+    { "name": "donut_3", "value": "#E3B23C" },
+    { "name": "donut_4", "value": "#E0614F" },
+    { "name": "donut_5", "value": "#A86CE8" },
+    { "name": "donut_6", "value": "#4FC3D6" },
+    { "name": "danger", "value": "#E0614F" },
+    { "name": "success", "value": "#4CBB6C" },
+    { "name": "quota_track", "value": "#333333" }
   ]
 }
