@@ -46,9 +46,9 @@ struct Index {
       const win = await window.getLastWindow(getContext(this));
       const sys = win.getWindowAvoidArea(window.AvoidAreaType.TYPE_SYSTEM);
       const nav = win.getWindowAvoidArea(window.AvoidAreaType.TYPE_NAVIGATION_INDICATOR);
-      const top = sys.topRect.height;
-      // 底部只取手势小白条自身高度，悬浮栏紧贴其上方，避免抬得过高
-      const bottom = nav.bottomRect.height > 0 ? nav.bottomRect.height : sys.bottomRect.height;
+      // getWindowAvoidArea 返回单位是 px，转成 vp 后再用于布局内边距
+      const top = px2vp(sys.topRect.height);
+      const bottom = px2vp(nav.bottomRect.height > 0 ? nav.bottomRect.height : sys.bottomRect.height);
       this.navIndicatorHeight = bottom;
       AppStorage.setOrCreate('statusBarHeight', top);
       AppStorage.setOrCreate('navIndicatorHeight', bottom);
