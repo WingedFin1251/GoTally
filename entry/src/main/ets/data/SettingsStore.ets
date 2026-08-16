@@ -50,21 +50,25 @@ export class SettingsStore {
   }
 
   static async getAll(): Promise<AppSettings> {
-    const pref = await SettingsStore.getPref();
-    const interval = await pref.get(SettingsKeys.SYNC_INTERVAL_SEC, DEFAULT_SETTINGS.syncIntervalSec) as number;
-    const windowRaw = await pref.get(SettingsKeys.WINDOW_DAYS, 60) as number;
-    const autoSync = await pref.get(SettingsKeys.AUTO_SYNC, DEFAULT_SETTINGS.autoSync) as boolean;
-    const theme = await pref.get(SettingsKeys.THEME, DEFAULT_SETTINGS.theme) as string;
-    const currency = await pref.get(SettingsKeys.CURRENCY, DEFAULT_SETTINGS.currency) as string;
-    const language = await pref.get(SettingsKeys.LANGUAGE, DEFAULT_SETTINGS.language) as string;
-    return {
-      syncIntervalSec: interval,
-      windowDays: windowRaw > 0 ? windowRaw : null,
-      autoSync: autoSync,
-      theme: theme,
-      currency: currency,
-      language: language,
-    };
+    try {
+      const pref = await SettingsStore.getPref();
+      const interval = await pref.get(SettingsKeys.SYNC_INTERVAL_SEC, DEFAULT_SETTINGS.syncIntervalSec) as number;
+      const windowRaw = await pref.get(SettingsKeys.WINDOW_DAYS, 60) as number;
+      const autoSync = await pref.get(SettingsKeys.AUTO_SYNC, DEFAULT_SETTINGS.autoSync) as boolean;
+      const theme = await pref.get(SettingsKeys.THEME, DEFAULT_SETTINGS.theme) as string;
+      const currency = await pref.get(SettingsKeys.CURRENCY, DEFAULT_SETTINGS.currency) as string;
+      const language = await pref.get(SettingsKeys.LANGUAGE, DEFAULT_SETTINGS.language) as string;
+      return {
+        syncIntervalSec: interval,
+        windowDays: windowRaw > 0 ? windowRaw : null,
+        autoSync: autoSync,
+        theme: theme,
+        currency: currency,
+        language: language,
+      };
+    } catch (e) {
+      throw e instanceof Error ? e : new Error(String(e));
+    }
   }
 
   static async getWindowDays(): Promise<number | null> {
@@ -88,19 +92,27 @@ export class SettingsStore {
   }
 
   static async put(key: string, value: preferences.ValueType): Promise<void> {
-    const pref = await SettingsStore.getPref();
-    await pref.put(key, value);
-    await pref.flush();
+    try {
+      const pref = await SettingsStore.getPref();
+      await pref.put(key, value);
+      await pref.flush();
+    } catch (e) {
+      throw e instanceof Error ? e : new Error(String(e));
+    }
   }
 
   static async save(payload: AppSettings): Promise<void> {
-    const pref = await SettingsStore.getPref();
-    await pref.put(SettingsKeys.SYNC_INTERVAL_SEC, payload.syncIntervalSec);
-    await pref.put(SettingsKeys.WINDOW_DAYS, payload.windowDays !== null ? payload.windowDays : 0);
-    await pref.put(SettingsKeys.AUTO_SYNC, payload.autoSync);
-    await pref.put(SettingsKeys.THEME, payload.theme);
-    await pref.put(SettingsKeys.CURRENCY, payload.currency);
-    await pref.put(SettingsKeys.LANGUAGE, payload.language);
-    await pref.flush();
+    try {
+      const pref = await SettingsStore.getPref();
+      await pref.put(SettingsKeys.SYNC_INTERVAL_SEC, payload.syncIntervalSec);
+      await pref.put(SettingsKeys.WINDOW_DAYS, payload.windowDays !== null ? payload.windowDays : 0);
+      await pref.put(SettingsKeys.AUTO_SYNC, payload.autoSync);
+      await pref.put(SettingsKeys.THEME, payload.theme);
+      await pref.put(SettingsKeys.CURRENCY, payload.currency);
+      await pref.put(SettingsKeys.LANGUAGE, payload.language);
+      await pref.flush();
+    } catch (e) {
+      throw e instanceof Error ? e : new Error(String(e));
+    }
   }
 }
