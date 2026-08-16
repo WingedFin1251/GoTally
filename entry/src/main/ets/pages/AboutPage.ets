@@ -11,6 +11,28 @@ export struct AboutPage {
       // 滚动内容：可滚到固定标题栏下方（标题栏模糊蒙版保证可读性）
       Scroll() {
         Column({ space: 12 }) {
+          // 应用标识头部：图标 + 名称 + 版本
+          Column({ space: 8 }) {
+            Image($r('app.media.startIcon'))
+              .width(72)
+              .height(72)
+              .borderRadius(18)
+              .objectFit(ImageFit.Cover)
+            Text('GoGauge')
+              .fontSize(22)
+              .fontWeight(FontWeight.Bold)
+              .fontColor($r('app.color.text_primary'))
+            Text('v1.0.0')
+              .fontSize(12)
+              .fontColor($r('app.color.text_muted'))
+          }
+          .width('100%')
+          .alignItems(HorizontalAlign.Center)
+          .padding({ top: 20, bottom: 20 })
+          .borderRadius(12)
+          .backgroundColor($r('app.color.bg_card'))
+
+          // 简介
           Column({ space: 8 }) {
             Text($r('app.string.about_intro')).fontSize(15).fontWeight(FontWeight.Bold).width('100%')
             Text($r('app.string.intro_text')).fontSize(13).fontColor($r('app.color.text_secondary')).lineHeight(20)
@@ -21,13 +43,29 @@ export struct AboutPage {
           .borderRadius(12)
           .backgroundColor($r('app.color.bg_card'))
 
-          Column({ space: 8 }) {
+          // 功能
+          Column({ space: 10 }) {
             Text($r('app.string.about_features')).fontSize(15).fontWeight(FontWeight.Bold).width('100%')
-            Row() { Text('· ').fontSize(13); Text($r('app.string.feat_1')).fontSize(13).fontColor($r('app.color.text_secondary')) }
-            Row() { Text('· ').fontSize(13); Text($r('app.string.feat_2')).fontSize(13).fontColor($r('app.color.text_secondary')) }
-            Row() { Text('· ').fontSize(13); Text($r('app.string.feat_3')).fontSize(13).fontColor($r('app.color.text_secondary')) }
-            Row() { Text('· ').fontSize(13); Text($r('app.string.feat_4')).fontSize(13).fontColor($r('app.color.text_secondary')) }
-            Row() { Text('· ').fontSize(13); Text($r('app.string.feat_5')).fontSize(13).fontColor($r('app.color.text_secondary')) }
+            Row({ space: 8 }) {
+              Text('✓').fontSize(13).fontWeight(FontWeight.Bold).fontColor($r('app.color.accent'))
+              Text($r('app.string.feat_1')).fontSize(13).fontColor($r('app.color.text_secondary')).layoutWeight(1).textAlign(TextAlign.Start)
+            }.width('100%').alignItems(VerticalAlign.Top)
+            Row({ space: 8 }) {
+              Text('✓').fontSize(13).fontWeight(FontWeight.Bold).fontColor($r('app.color.accent'))
+              Text($r('app.string.feat_2')).fontSize(13).fontColor($r('app.color.text_secondary')).layoutWeight(1).textAlign(TextAlign.Start)
+            }.width('100%').alignItems(VerticalAlign.Top)
+            Row({ space: 8 }) {
+              Text('✓').fontSize(13).fontWeight(FontWeight.Bold).fontColor($r('app.color.accent'))
+              Text($r('app.string.feat_3')).fontSize(13).fontColor($r('app.color.text_secondary')).layoutWeight(1).textAlign(TextAlign.Start)
+            }.width('100%').alignItems(VerticalAlign.Top)
+            Row({ space: 8 }) {
+              Text('✓').fontSize(13).fontWeight(FontWeight.Bold).fontColor($r('app.color.accent'))
+              Text($r('app.string.feat_4')).fontSize(13).fontColor($r('app.color.text_secondary')).layoutWeight(1).textAlign(TextAlign.Start)
+            }.width('100%').alignItems(VerticalAlign.Top)
+            Row({ space: 8 }) {
+              Text('✓').fontSize(13).fontWeight(FontWeight.Bold).fontColor($r('app.color.accent'))
+              Text($r('app.string.feat_5')).fontSize(13).fontColor($r('app.color.text_secondary')).layoutWeight(1).textAlign(TextAlign.Start)
+            }.width('100%').alignItems(VerticalAlign.Top)
           }
           .width('100%')
           .alignItems(HorizontalAlign.Start)
@@ -35,14 +73,21 @@ export struct AboutPage {
           .borderRadius(12)
           .backgroundColor($r('app.color.bg_card'))
 
+          // 链接
           Column({ space: 8 }) {
             Text($r('app.string.about_links')).fontSize(15).fontWeight(FontWeight.Bold).width('100%')
-            Text('GitHub: github.com/yphyphyph/opencode-go-gauge')
-              .fontSize(13)
-              .fontColor($r('app.color.accent'))
-              .onClick(() => {
-                (getContext(this) as common.UIAbilityContext).openLink('https://github.com/yphyphyph/opencode-go-gauge');
-              })
+            Row({ space: 8 }) {
+              Text('GitHub').fontSize(13).fontColor($r('app.color.text_primary'))
+              Text('github.com/yphyphyph/opencode-go-gauge')
+                .fontSize(13)
+                .fontColor($r('app.color.accent'))
+                .layoutWeight(1)
+                .textAlign(TextAlign.End)
+            }
+            .width('100%')
+            .onClick(() => {
+              (getContext(this) as common.UIAbilityContext).openLink('https://github.com/yphyphyph/opencode-go-gauge');
+            })
           }
           .width('100%')
           .alignItems(HorizontalAlign.Start)
@@ -50,10 +95,13 @@ export struct AboutPage {
           .borderRadius(12)
           .backgroundColor($r('app.color.bg_card'))
 
+          // 页脚
           Text($r('app.string.page_foot'))
             .fontSize(11)
             .fontColor($r('app.color.text_muted'))
-            .margin({ top: 8 })
+            .width('100%')
+            .textAlign(TextAlign.Center)
+            .margin({ top: 4, bottom: 8 })
         }
         .justifyContent(FlexAlign.Start)
         .alignItems(HorizontalAlign.Start)
