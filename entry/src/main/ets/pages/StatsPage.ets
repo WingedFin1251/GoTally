@@ -1,5 +1,4 @@
 // entry/src/main/ets/pages/StatsPage.ets
-import { display } from '@kit.ArkUI';
 import { StatsViewModel } from './StatsViewModel';
 import { StatCard } from '../components/ui/StatCard';
 import { DonutChart, DonutItem } from '../components/charts/DonutChart';
@@ -17,13 +16,11 @@ export struct StatsPage {
   @State chartVersion: number = 0;
   @State currency: string = 'CNY';
   @State usdCny: number = Constants.DEFAULT_USD_CNY;
-  @State wide: boolean = false;
   @StorageProp('statusBarHeight') statusBarHeight: number = 0;
   @StorageProp('navIndicatorHeight') navIndicatorHeight: number = 0;
   private refreshRetried: boolean = false;
 
   aboutToAppear(): void {
-    this.wide = display.getDefaultDisplaySync().width >= 840;
     this.refresh();
     this.initCurrency();
   }
@@ -205,7 +202,6 @@ export struct StatsPage {
     .padding(12)
     .borderRadius(12)
     .backgroundColor($r('app.color.bg_card'))
-    .constraintSize({ minHeight: 300 })
   }
 
   private modelColor(model: string): string {
@@ -261,7 +257,6 @@ export struct StatsPage {
     .padding(12)
     .borderRadius(12)
     .backgroundColor($r('app.color.bg_card'))
-    .constraintSize({ minHeight: 300 })
   }
 
   build() {
@@ -271,16 +266,8 @@ export struct StatsPage {
         Column({ space: 12 }) {
           this.KpiCards()
           this.TokenDetail()
-          if (this.wide) {
-            Row({ space: 12 }) {
-              Column() { this.ModelRank() }.layoutWeight(1)
-              Column() { this.TrendCard() }.layoutWeight(1)
-            }
-            .width('100%')
-          } else {
-            this.ModelRank()
-            this.TrendCard()
-          }
+          this.ModelRank()
+          this.TrendCard()
         }
         .padding({ left: 12, right: 12, top: this.statusBarHeight + 64, bottom: 96 })
       }
