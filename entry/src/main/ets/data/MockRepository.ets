@@ -52,6 +52,13 @@ export class MockRepository implements UsageStore {
   async getWorkspaceHint(): Promise<string> { return 'wrk_mock'; }
   async saveResolvedWorkspace(workspaceId: string): Promise<void> {}
   async saveToken(token: string, workspaceId: string): Promise<void> {}
+  async clearAccount(): Promise<void> {
+    this.syncState = {
+      lastSyncAt: '', lastSyncStatus: 'ok', lastSyncError: '',
+      lastInsertedCount: 0, deepestPageFetched: -1, totalRecords: 0,
+      oldestRecordAt: '', newestRecordAt: '',
+    };
+  }
   async insertUsageRecords(records: UsageRecord[]): Promise<number> {
     let n = 0;
     const known = new Set(this.records.map((r) => r.usgId));

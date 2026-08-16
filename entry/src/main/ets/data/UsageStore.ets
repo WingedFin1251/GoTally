@@ -7,6 +7,7 @@ export interface UsageStore {
   getWorkspaceHint(): Promise<string>;
   saveResolvedWorkspace(workspaceId: string): Promise<void>;
   saveToken(token: string, workspaceId: string): Promise<void>;
+  clearAccount(): Promise<void>;
   insertUsageRecords(records: UsageRecord[]): Promise<number>;
   pruneOldRecords(windowDays: number): Promise<number>;
   getWindowDays(): Promise<number | null>;

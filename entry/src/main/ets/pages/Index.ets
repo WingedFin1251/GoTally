@@ -5,6 +5,8 @@ import { DataProvider } from '../data/DataProvider';
 import { DashboardPage } from './DashboardPage';
 import { StatsPage } from './StatsPage';
 import { RecordsPage } from './RecordsPage';
+import { SettingsPage } from './SettingsPage';
+import { AboutPage } from './AboutPage';
 
 @Entry
 @Component
@@ -58,18 +60,6 @@ struct Index {
         .onClick(() => {
           router.pushUrl({ url: 'pages/Login' });
         })
-    }
-    .width('100%')
-    .height('100%')
-    .justifyContent(FlexAlign.Center)
-  }
-
-  @Builder
-  TabContentPlaceholder(label: string) {
-    Column() {
-      Text(label)
-        .fontSize(16)
-        .fontColor($r('app.color.text_muted'))
     }
     .width('100%')
     .height('100%')
@@ -155,9 +145,9 @@ struct Index {
       } else if (this.currentTab === 2) {
         RecordsPage()
       } else if (this.currentTab === 3) {
-        this.TabContentPlaceholder('设置占位')
+        SettingsPage()
       } else {
-        this.TabContentPlaceholder('关于占位')
+        AboutPage()
       }
     }
     .layoutWeight(1)
