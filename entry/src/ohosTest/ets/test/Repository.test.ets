@@ -1,7 +1,7 @@
 // entry/src/ohosTest/ets/test/Repository.test.ets
 import { describe, beforeAll, it, expect } from '@ohos/hypium';
 import { common } from '@kit.AbilityKit';
-import { AbilityDelegatorRegistry } from '@kit.TestKit';
+import { abilityDelegatorRegistry } from '@kit.TestKit';
 import { AppContext } from '../../../main/ets/common/AppContext';
 import { RdbHelper } from '../../../main/ets/data/RdbHelper';
 import { UsageRepository } from '../../../main/ets/data/UsageRepository';
@@ -11,7 +11,7 @@ export default function repositoryTest() {
   describe('UsageRepositoryTest', () => {
     beforeAll(() => {
       // 设备测试环境注入应用上下文，供 RDB/Preferences 初始化使用
-      const ctx = AbilityDelegatorRegistry.getAbilityDelegator().getAppContext();
+      const ctx = abilityDelegatorRegistry.getAbilityDelegator().getAppContext();
       AppContext.context = ctx as common.UIAbilityContext;
     });
     it('insertAndTotals', 0, async () => {
