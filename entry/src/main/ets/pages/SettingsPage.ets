@@ -52,16 +52,25 @@ export struct SettingsPage {
     this.syncState = await DataProvider.getStore().getSyncState();
   }
 
+  /** 当前设置项选中值（Builder 内部读 this.settings，随状态变化刷新选中态）。 */
+  private settingCurrent(key: string): string {
+    if (key === 'syncIntervalSec') { return `${this.settings.syncIntervalSec}`; }
+    if (key === 'windowDays') { return this.settings.windowDays === null ? 'all' : `${this.settings.windowDays}`; }
+    if (key === 'theme') { return this.settings.theme; }
+    if (key === 'currency') { return this.settings.currency; }
+    return this.settings.language;
+  }
+
   @Builder
-  PillRow(options: PillOption[], current: string, onPick: (v: string) => void) {
+  PillRow(key: string, options: PillOption[], onPick: (v: string) => void) {
     Row({ space: 6 }) {
       ForEach(options, (opt: PillOption) => {
         Text(opt.label)
           .fontSize(11)
           .padding({ left: 8, right: 8, top: 4, bottom: 4 })
           .borderRadius(10)
-          .backgroundColor(current === opt.value ? $r('app.color.accent') : $r('app.color.divider'))
-          .fontColor(current === opt.value ? Color.White : $r('app.color.text_secondary'))
+          .backgroundColor(this.settingCurrent(key) === opt.value ? $r('app.color.accent') : $r('app.color.divider'))
+          .fontColor(this.settingCurrent(key) === opt.value ? Color.White : $r('app.color.text_secondary'))
           .onClick(() => onPick(opt.value))
       }, (opt: PillOption) => opt.value)
     }
@@ -103,17 +112,18 @@ export struct SettingsPage {
           }
           SettingRow({ title: $r('app.string.sync_interval'), desc: $r('app.string.sync_interval_desc') }) {
             this.PillRow(
+              'syncIntervalSec',
               [
                 { value: '60', label: $r('app.string.min_1') },
                 { value: '300', label: $r('app.string.min_5') },
                 { value: '900', label: $r('app.string.min_15') },
                 { value: '1800', label: $r('app.string.min_30') },
               ],
-              `${this.settings.syncIntervalSec}`,
               (v: string) => { this.settings.syncIntervalSec = Number(v); SettingsStore.save(this.settings); AppStorage.setOrCreate('autoSyncChanged', (AppStorage.get('autoSyncChanged') as number ?? 0) + 1); })
           }
           SettingRow({ title: $r('app.string.sync_range'), desc: $r('app.string.sync_range_desc') }) {
             this.PillRow(
+              'windowDays',
               [
                 { value: '30', label: $r('app.string.days_30short') },
                 { value: '60', label: $r('app.string.days_60') },
@@ -121,7 +131,6 @@ export struct SettingsPage {
                 { value: '180', label: $r('app.string.days_180') },
                 { value: 'all', label: $r('app.string.all') },
               ],
-              this.settings.windowDays === null ? 'all' : `${this.settings.windowDays}`,
               (v: string) => { this.settings.windowDays = v === 'all' ? null : Number(v); SettingsStore.save(this.settings); AppStorage.setOrCreate('autoSyncChanged', (AppStorage.get('autoSyncChanged') as number ?? 0) + 1); })
           }
           SettingRow({ title: $r('app.string.full_sync'), desc: this.syncProgressMsg !== '' ? this.syncProgressMsg : $r('app.string.full_sync_desc') }) {
@@ -136,20 +145,20 @@ export struct SettingsPage {
         SettingsCard({ title: $r('app.string.set_appearance') }) {
           SettingRow({ title: $r('app.string.theme'), desc: $r('app.string.theme_desc') }) {
             this.PillRow(
+              'theme',
               [{ value: 'light', label: $r('app.string.light') }, { value: 'dark', label: $r('app.string.dark') }],
-              this.settings.theme,
               (v: string) => { this.settings.theme = v; SettingsStore.save(this.settings); this.applyTheme(v); })
           }
           SettingRow({ title: $r('app.string.currency'), desc: $r('app.string.currency_desc') }) {
             this.PillRow(
+              'currency',
               [{ value: 'CNY', label: '¥ CNY' }, { value: 'USD', label: '$ USD' }],
-              this.settings.currency,
               (v: string) => { this.settings.currency = v; SettingsStore.save(this.settings); })
           }
           SettingRow({ title: $r('app.string.language'), desc: $r('app.string.language_desc') }) {
             this.PillRow(
+              'language',
               [{ value: 'zh', label: '中文' }, { value: 'en', label: 'English' }],
-              this.settings.language,
               (v: string) => { this.settings.language = v; SettingsStore.save(this.settings); setLanguage(v); promptAction.showToast({ message: '重启后生效' }); })
           }
         }
