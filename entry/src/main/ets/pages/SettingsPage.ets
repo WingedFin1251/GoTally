@@ -153,13 +153,30 @@ export struct SettingsPage {
             this.PillRow(
               'currency',
               [{ value: 'CNY', label: '¥ CNY' }, { value: 'USD', label: '$ USD' }],
-              (v: string) => { this.settings.currency = v; SettingsStore.save(this.settings); })
+              (v: string) => {
+                this.settings.currency = v;
+                SettingsStore.save(this.settings);
+                // 同步到 AppStorage，首页/统计/记录页费用立即切换货币
+                AppStorage.setOrCreate('currency', v);
+              })
           }
           SettingRow({ title: $r('app.string.language'), desc: $r('app.string.language_desc') }) {
             this.PillRow(
               'language',
               [{ value: 'zh', label: '中文' }, { value: 'en', label: 'English' }],
-              (v: string) => { this.settings.language = v; SettingsStore.save(this.settings); setLanguage(v); promptAction.showToast({ message: '重启后生效' }); })
+              (v: string) => {
+                this.settings.language = v;
+                SettingsStore.save(this.settings);
+                setLanguage(v);
+                // 应用级语言切换，界面文案立即生效
+                try {
+                  (getContext(this) as common.UIAbilityContext).getApplicationContext()
+                    .setLanguage(v === 'zh' ? 'zh-CN' : 'en-US');
+                } catch (e) {
+                  console.error('setLanguage failed: ' + (e instanceof Error ? e.message : String(e)));
+                }
+                promptAction.showToast({ message: v === 'zh' ? '已切换为中文' : 'Switched to English' });
+              })
           }
         }
 

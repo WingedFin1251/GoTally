@@ -14,8 +14,8 @@ import type { ModelStat } from '../model/Stats';
 export struct StatsPage {
   @State vm: StatsViewModel = new StatsViewModel();
   @State chartVersion: number = 0;
-  @State currency: string = 'CNY';
-  @State usdCny: number = Constants.DEFAULT_USD_CNY;
+  @StorageProp('currency') currency: string = 'CNY';
+  @StorageProp('usdCny') usdCny: number = Constants.DEFAULT_USD_CNY;
   @StorageProp('statusBarHeight') statusBarHeight: number = 0;
   @StorageProp('navIndicatorHeight') navIndicatorHeight: number = 0;
   private refreshRetried: boolean = false;
@@ -40,8 +40,8 @@ export struct StatsPage {
   }
 
   private async initCurrency(): Promise<void> {
-    this.currency = await SettingsStore.getCurrency();
-    this.usdCny = await OpenCodeApi.fetchUsdCny();
+    AppStorage.setOrCreate('currency', await SettingsStore.getCurrency());
+    AppStorage.setOrCreate('usdCny', await OpenCodeApi.fetchUsdCny());
   }
 
   private dimValue(m: ModelStat, dim: string): number {

@@ -15,8 +15,8 @@ import type { QuotaWindow } from '../model/UsageRecord';
 export struct DashboardPage {
   @State vm: DashboardViewModel = new DashboardViewModel();
   @State chartVersion: number = 0;
-  @State currency: string = 'CNY';
-  @State usdCny: number = Constants.DEFAULT_USD_CNY;
+  @StorageProp('currency') currency: string = 'CNY';
+  @StorageProp('usdCny') usdCny: number = Constants.DEFAULT_USD_CNY;
   @StorageProp('statusBarHeight') statusBarHeight: number = 0;
   @StorageProp('navIndicatorHeight') navIndicatorHeight: number = 0;
   private refreshRetried: boolean = false;
@@ -41,8 +41,8 @@ export struct DashboardPage {
   }
 
   private async initCurrency(): Promise<void> {
-    this.currency = await SettingsStore.getCurrency();
-    this.usdCny = await OpenCodeApi.fetchUsdCny();
+    AppStorage.setOrCreate('currency', await SettingsStore.getCurrency());
+    AppStorage.setOrCreate('usdCny', await OpenCodeApi.fetchUsdCny());
   }
 
   @Builder

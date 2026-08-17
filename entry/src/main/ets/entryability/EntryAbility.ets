@@ -3,6 +3,7 @@ import { AbilityConstant, ConfigurationConstant, UIAbility, Want } from '@kit.Ab
 import { hilog } from '@kit.PerformanceAnalysisKit';
 import { window } from '@kit.ArkUI';
 import { AppContext } from '../common/AppContext';
+import { SettingsStore } from '../data/SettingsStore';
 
 const DOMAIN = 0x0000;
 
@@ -14,7 +15,18 @@ export default class EntryAbility extends UIAbility {
     } catch (err) {
       hilog.error(DOMAIN, 'testTag', 'Failed to set colorMode. Cause: %{public}s', JSON.stringify(err));
     }
+    this.applySavedLanguage();
     hilog.info(DOMAIN, 'testTag', '%{public}s', 'Ability onCreate');
+  }
+
+  /** 启动时应用用户保存的语言偏好（配合设置页 ApplicationContext.setLanguage 运行时切换）。 */
+  private async applySavedLanguage(): Promise<void> {
+    try {
+      const lang = await SettingsStore.getLanguage();
+      this.context.getApplicationContext().setLanguage(lang === 'zh' ? 'zh-CN' : 'en-US');
+    } catch (e) {
+      hilog.warn(DOMAIN, 'testTag', 'Failed to apply saved language. Cause: %{public}s', String(e));
+    }
   }
 
   onDestroy(): void {

@@ -12,8 +12,8 @@ import type { SessionStat, RecordRow } from '../model/Stats';
 @Component
 export struct RecordsPage {
   @State vm: RecordsViewModel = new RecordsViewModel();
-  @State currency: string = 'CNY';
-  @State usdCny: number = Constants.DEFAULT_USD_CNY;
+  @StorageProp('currency') currency: string = 'CNY';
+  @StorageProp('usdCny') usdCny: number = Constants.DEFAULT_USD_CNY;
   @StorageProp('statusBarHeight') statusBarHeight: number = 0;
   @StorageProp('navIndicatorHeight') navIndicatorHeight: number = 0;
   private reloadRetried: boolean = false;
@@ -38,8 +38,8 @@ export struct RecordsPage {
   }
 
   private async initCurrency(): Promise<void> {
-    this.currency = await SettingsStore.getCurrency();
-    this.usdCny = await OpenCodeApi.fetchUsdCny();
+    AppStorage.setOrCreate('currency', await SettingsStore.getCurrency());
+    AppStorage.setOrCreate('usdCny', await OpenCodeApi.fetchUsdCny());
   }
 
   /** 「共 N 条」本地化（getStringSync 推荐传资源 id，避免已废弃的 Resource 重载）。 */
