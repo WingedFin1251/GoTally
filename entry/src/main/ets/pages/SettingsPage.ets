@@ -191,7 +191,7 @@ export struct SettingsPage {
           SettingRow({ title: $r('app.string.current_version'), desc: '1.0.0' }) {}
           SettingRow({ title: $r('app.string.check_update'), desc: $r('app.string.check_update_desc') }) {
             Button($r('app.string.check_update_btn')).fontSize(12).height(30).onClick(() => {
-              (getContext(this) as common.UIAbilityContext).openLink('https://github.com/yphyphyph/opencode-go-gauge/releases');
+              (getContext(this) as common.UIAbilityContext).openLink('https://github.com/WingedFin1251/GoTally/releases');
             })
           }
         }

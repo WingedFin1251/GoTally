@@ -78,7 +78,7 @@ export struct AboutPage {
             Text($r('app.string.about_links')).fontSize(15).fontWeight(FontWeight.Bold).width('100%')
             Row({ space: 8 }) {
               Text('GitHub').fontSize(13).fontColor($r('app.color.text_primary'))
-              Text('github.com/yphyphyph/opencode-go-gauge')
+              Text('github.com/WingedFin1251/GoTally')
                 .fontSize(13)
                 .fontColor($r('app.color.accent'))
                 .layoutWeight(1)
@@ -86,7 +86,7 @@ export struct AboutPage {
             }
             .width('100%')
             .onClick(() => {
-              (getContext(this) as common.UIAbilityContext).openLink('https://github.com/yphyphyph/opencode-go-gauge');
+              (getContext(this) as common.UIAbilityContext).openLink('https://github.com/WingedFin1251/GoTally');
             })
           }
           .width('100%')
