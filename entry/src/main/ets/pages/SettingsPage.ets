@@ -28,15 +28,25 @@ export struct SettingsPage {
   @State syncState: SyncState = { lastSyncAt: '', lastSyncStatus: '', lastSyncError: '', lastInsertedCount: 0, deepestPageFetched: -1, totalRecords: 0, oldestRecordAt: '', newestRecordAt: '' };
   @State syncing: boolean = false;
   @State syncProgressMsg: string = '';
+  /** 上一次 onProgress 上报的阶段，用于捕捉 done/error 完成时刻（仅触发一次 toast/刷新）。 */
+  private lastPhase: string = 'idle';
   @StorageProp('statusBarHeight') statusBarHeight: number = 0;
   @StorageProp('navIndicatorHeight') navIndicatorHeight: number = 0;
 
   aboutToAppear(): void {
     this.load();
     const mgr = DataProvider.getSyncManager();
+    // 以当前阶段为基线，避免进入页面时把旧消息误当作新完成事件
+    this.lastPhase = mgr.getProgress().phase;
     mgr.onProgress = (p: SyncProgress) => {
       this.syncing = p.running;
       this.syncProgressMsg = p.message;
+      if (p.phase !== this.lastPhase) {
+        this.lastPhase = p.phase;
+        if (p.phase === 'done' || p.phase === 'error') {
+          this.onSyncFinished(p);
+        }
+      }
     };
   }
 
@@ -50,6 +60,29 @@ export struct SettingsPage {
     this.loggedIn = token.trim() !== '';
     this.workspace = await DataProvider.getStore().getWorkspaceHint();
     this.syncState = await DataProvider.getStore().getSyncState();
+  }
+
+  /** 同步完成/失败收尾：刷新同步状态并弹提示，页面无需重启即可看到最新「最近同步 / 记录总数」。 */
+  private async onSyncFinished(p: SyncProgress): Promise<void> {
+    this.syncProgressMsg = '';
+    try {
+      this.syncState = await DataProvider.getStore().getSyncState();
+    } catch (e) {
+      console.error('reload syncState failed: ' + (e instanceof Error ? e.message : String(e)));
+    }
+    let msg: string = '';
+    try {
+      const rm = getContext(this).resourceManager;
+      if (p.phase === 'done') {
+        msg = rm.getStringSync($r('app.string.sync_done').id, p.inserted);
+      } else {
+        const base = rm.getStringSync($r('app.string.sync_error').id);
+        msg = p.message !== '' ? `${base}: ${p.message}` : base;
+      }
+    } catch (e) {
+      msg = p.phase === 'done' ? `同步完成，新增 ${p.inserted} 条` : '同步失败';
+    }
+    promptAction.showToast({ message: msg });
   }
 
   /** 当前设置项选中值（Builder 内部读 this.settings，随状态变化刷新选中态）。 */
