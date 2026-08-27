@@ -87,4 +87,4 @@ GoTally 是一个**非官方客户端**：通过解析 OpenCode Go 官方 Dashbo
 
 ## License
 
-默认采用 MIT 协议（如需转让/商用请自行补充 `LICENSE` 文件）。项目数据由 [OpenCode](https://opencode.ai) 提供。
+本项目采用 [MIT](LICENSE) 协议，版权归 WingedFin1251 所有。项目数据由 [OpenCode](https://opencode.ai) 提供。
