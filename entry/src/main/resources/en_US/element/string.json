@@ -52,6 +52,7 @@
     { "name": "total_tokens", "value": "Total Tokens" },
     { "name": "records_page", "value": "Usage Records" },
     { "name": "records_count_hint", "value": "{0} in total" },
+    { "name": "list_empty_hint", "value": "No data yet — run a full sync in Settings" },
     { "name": "session_usage", "value": "Session Usage" },
     { "name": "usage_records", "value": "Usage Records" },
     { "name": "all_models", "value": "All Models" },

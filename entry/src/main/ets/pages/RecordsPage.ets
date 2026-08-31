@@ -92,26 +92,37 @@ export struct RecordsPage {
         .width('100%')
         .padding({ top: 6, bottom: 6 })
 
-        ForEach(this.vm.sessions, (s: SessionStat) => {
-          Row() {
-            Text(this.shortSession(s.sessionId)).fontSize(12).layoutWeight(2).fontColor($r('app.color.text_primary')).maxLines(1)
-            Text(formatTokensUi(s.totalInputTokens)).fontSize(12).layoutWeight(1).textAlign(TextAlign.End).fontColor($r('app.color.text_secondary'))
-            Text(formatTokensUi(s.totalOutputTokens)).fontSize(12).layoutWeight(1).textAlign(TextAlign.End).fontColor($r('app.color.text_secondary'))
-            Text(`${s.requestCount}`).fontSize(12).layoutWeight(1).textAlign(TextAlign.End).fontColor($r('app.color.text_secondary'))
-            Text(formatCost(s.totalCostUsd, this.currency, this.usdCny)).fontSize(12).layoutWeight(1).textAlign(TextAlign.End).fontColor($r('app.color.text_secondary'))
-          }
-          .width('100%')
-          .padding({ top: 5, bottom: 5 })
-        }, (s: SessionStat) => s.sessionId)
+        if (this.vm.sessions.length === 0) {
+          Text($r('app.string.list_empty_hint'))
+            .fontSize(12)
+            .fontColor($r('app.color.text_muted'))
+            .width('100%')
+            .textAlign(TextAlign.Center)
+            .padding({ top: 14, bottom: 14 })
+        } else {
+          ForEach(this.vm.sessions, (s: SessionStat) => {
+            Row() {
+              Text(this.shortSession(s.sessionId)).fontSize(12).layoutWeight(2).fontColor($r('app.color.text_primary')).maxLines(1)
+              Text(formatTokensUi(s.totalInputTokens)).fontSize(12).layoutWeight(1).textAlign(TextAlign.End).fontColor($r('app.color.text_secondary'))
+              Text(formatTokensUi(s.totalOutputTokens)).fontSize(12).layoutWeight(1).textAlign(TextAlign.End).fontColor($r('app.color.text_secondary'))
+              Text(`${s.requestCount}`).fontSize(12).layoutWeight(1).textAlign(TextAlign.End).fontColor($r('app.color.text_secondary'))
+              Text(formatCost(s.totalCostUsd, this.currency, this.usdCny)).fontSize(12).layoutWeight(1).textAlign(TextAlign.End).fontColor($r('app.color.text_secondary'))
+            }
+            .width('100%')
+            .padding({ top: 5, bottom: 5 })
+          }, (s: SessionStat) => s.sessionId)
+        }
       }
       .width('100%')
 
-      Pager({
-        page: this.vm.sessionPage,
-        totalPages: Math.ceil(this.vm.sessionTotal / 10),
-        onPrev: () => { this.vm.loadSessions(this.vm.sessionPage - 1); },
-        onNext: () => { this.vm.loadSessions(this.vm.sessionPage + 1); },
-      })
+      if (Math.ceil(this.vm.sessionTotal / 10) > 1) {
+        Pager({
+          page: this.vm.sessionPage,
+          totalPages: Math.ceil(this.vm.sessionTotal / 10),
+          onPrev: () => { this.vm.loadSessions(this.vm.sessionPage - 1); },
+          onNext: () => { this.vm.loadSessions(this.vm.sessionPage + 1); },
+        })
+      }
     }
     .width('100%')
     .padding(12)
@@ -183,33 +194,44 @@ export struct RecordsPage {
         .width('100%')
         .padding({ top: 6, bottom: 6 })
 
-        ForEach(this.vm.records, (r: RecordRow) => {
-          Row() {
-            Text(this.timeText(r)).fontSize(11).layoutWeight(2).fontColor($r('app.color.text_secondary')).maxLines(1)
-              .textOverflow({ overflow: TextOverflow.Ellipsis })
-              .onClick(() => {
-                promptAction.showToast({ message: r.createdAt === '' ? '--' : r.createdAt });
-              })
-            Text(r.model).fontSize(11).layoutWeight(3).fontColor($r('app.color.text_primary')).maxLines(2).textOverflow({ overflow: TextOverflow.Ellipsis })
-              .onClick(() => {
-                promptAction.showToast({ message: r.model });
-              })
-            Text(formatTokensUi(r.inputTokens)).fontSize(11).layoutWeight(1).textAlign(TextAlign.End).fontColor($r('app.color.text_secondary'))
-            Text(formatTokensUi(r.outputTokens)).fontSize(11).layoutWeight(1).textAlign(TextAlign.End).fontColor($r('app.color.text_secondary'))
-            Text(formatCost(r.costUsd, this.currency, this.usdCny)).fontSize(11).layoutWeight(1).textAlign(TextAlign.End).fontColor($r('app.color.text_secondary'))
-          }
-          .width('100%')
-          .padding({ top: 4, bottom: 4 })
-        }, (r: RecordRow) => r.usgId)
+        if (this.vm.records.length === 0) {
+          Text($r('app.string.list_empty_hint'))
+            .fontSize(12)
+            .fontColor($r('app.color.text_muted'))
+            .width('100%')
+            .textAlign(TextAlign.Center)
+            .padding({ top: 14, bottom: 14 })
+        } else {
+          ForEach(this.vm.records, (r: RecordRow) => {
+            Row() {
+              Text(this.timeText(r)).fontSize(11).layoutWeight(2).fontColor($r('app.color.text_secondary')).maxLines(1)
+                .textOverflow({ overflow: TextOverflow.Ellipsis })
+                .onClick(() => {
+                  promptAction.showToast({ message: r.createdAt === '' ? '--' : r.createdAt });
+                })
+              Text(r.model).fontSize(11).layoutWeight(3).fontColor($r('app.color.text_primary')).maxLines(2).textOverflow({ overflow: TextOverflow.Ellipsis })
+                .onClick(() => {
+                  promptAction.showToast({ message: r.model });
+                })
+              Text(formatTokensUi(r.inputTokens)).fontSize(11).layoutWeight(1).textAlign(TextAlign.End).fontColor($r('app.color.text_secondary'))
+              Text(formatTokensUi(r.outputTokens)).fontSize(11).layoutWeight(1).textAlign(TextAlign.End).fontColor($r('app.color.text_secondary'))
+              Text(formatCost(r.costUsd, this.currency, this.usdCny)).fontSize(11).layoutWeight(1).textAlign(TextAlign.End).fontColor($r('app.color.text_secondary'))
+            }
+            .width('100%')
+            .padding({ top: 4, bottom: 4 })
+          }, (r: RecordRow) => r.usgId)
+        }
       }
       .width('100%')
 
-      Pager({
-        page: this.vm.recordPage,
-        totalPages: Math.ceil(this.vm.recordTotal / 50),
-        onPrev: () => { this.vm.loadRecords(this.vm.recordPage - 1); },
-        onNext: () => { this.vm.loadRecords(this.vm.recordPage + 1); },
-      })
+      if (Math.ceil(this.vm.recordTotal / 50) > 1) {
+        Pager({
+          page: this.vm.recordPage,
+          totalPages: Math.ceil(this.vm.recordTotal / 50),
+          onPrev: () => { this.vm.loadRecords(this.vm.recordPage - 1); },
+          onNext: () => { this.vm.loadRecords(this.vm.recordPage + 1); },
+        })
+      }
     }
     .width('100%')
     .padding(12)
@@ -226,6 +248,7 @@ export struct RecordsPage {
           this.RecordsCard()
         }
         .width('100%')
+        .constraintSize({ minHeight: '100%' })
         .padding({ left: 12, right: 12, top: this.statusBarHeight + 52, bottom: 96 })
       }
       .width('100%')

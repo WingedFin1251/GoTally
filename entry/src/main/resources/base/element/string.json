@@ -60,6 +60,7 @@
 
     { "name": "records_page", "value": "使用记录" },
     { "name": "records_count_hint", "value": "共 {0} 条" },
+    { "name": "list_empty_hint", "value": "暂无数据，可在设置页执行全量同步" },
     { "name": "session_usage", "value": "会话用量" },
     { "name": "usage_records", "value": "使用记录" },
     { "name": "all_models", "value": "全部模型" },
