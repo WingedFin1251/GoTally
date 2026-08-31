@@ -42,9 +42,14 @@ export struct RecordsPage {
     AppStorage.setOrCreate('usdCny', await OpenCodeApi.fetchUsdCny());
   }
 
-  /** 「共 N 条」本地化（getStringSync 推荐传资源 id，避免已废弃的 Resource 重载）。 */
+  /** 「共 N 条」本地化：取模板后手动替换 {0}，避免个别版本 getStringSync 不执行占位符格式化。 */
   private countHint(n: number): string {
-    return getContext(this).resourceManager.getStringSync($r('app.string.records_count_hint').id, n);
+    try {
+      const tpl = getContext(this).resourceManager.getStringSync($r('app.string.records_count_hint').id);
+      return tpl.split('{0}').join(`${n}`);
+    } catch (e) {
+      return `共 ${n} 条`;
+    }
   }
 
   @Builder
@@ -179,7 +184,12 @@ export struct RecordsPage {
           .onSelect((index: number) => {
             this.vm.setModel(index === 0 ? '' : this.vm.models[index - 1]);
           })
-        Text(this.countHint(this.vm.recordTotal)).fontSize(11).fontColor($r('app.color.text_muted'))
+        Text(this.countHint(this.vm.recordTotal))
+          .fontSize(11)
+          .fontColor($r('app.color.text_muted'))
+          .margin({ left: 10 })
+          .constraintSize({ minWidth: 44 })
+          .textAlign(TextAlign.End)
       }
       .width('100%')
 
