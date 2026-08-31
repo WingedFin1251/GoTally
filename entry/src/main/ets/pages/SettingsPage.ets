@@ -230,7 +230,7 @@ export struct SettingsPage {
 
         // 更新
         SettingsCard({ title: $r('app.string.set_update') }) {
-          SettingRow({ title: $r('app.string.current_version'), desc: '1.0.0' }) {}
+          SettingRow({ title: $r('app.string.current_version'), desc: '1.1.0' }) {}
           SettingRow({ title: $r('app.string.check_update'), desc: $r('app.string.check_update_desc') }) {
             Button($r('app.string.check_update_btn')).fontSize(12).height(30).onClick(() => {
               const lctx = this.getUIContext().getHostContext();
