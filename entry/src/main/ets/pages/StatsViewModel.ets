@@ -23,22 +23,23 @@ export class StatsViewModel {
     this.dim = d;
   }
 
-  async load(): Promise<void> {
+  async load(period: string): Promise<void> {
     this.loading = true;
+    this.period = period;
     const agg = DataProvider.getAggregator();
     // 各项独立 try/catch：单项失败保留旧值并记日志，不让一次失败中断整页刷新
     // （否则饼图/趋势图会停留在上一次 period 的数据，造成「今天」显示亿级旧数据）。
     try {
-      this.totals = await agg.totals(this.period);
+      this.totals = await agg.totals(period);
     } catch (e) {
       console.error('load totals failed: ' + (e instanceof Error ? e.message : String(e)));
     }
     try {
-      this.models = await agg.modelStats(this.period);
+      this.models = await agg.modelStats(period);
     } catch (e) {
       console.error('load modelStats failed: ' + (e instanceof Error ? e.message : String(e)));
     }
-    if (this.period === Constants.PERIOD_TODAY) {
+    if (period === Constants.PERIOD_TODAY) {
       // 「今天」：24 小时逐时趋势
       this.daily30 = [];
       try {
@@ -48,7 +49,7 @@ export class StatsViewModel {
       }
     } else {
       this.todayTrend = [];
-      const days = this.period === '7d' ? 7 : (this.period === '30d' ? 30 : 90);
+      const days = period === '7d' ? 7 : (period === '30d' ? 30 : 90);
       try {
         this.daily30 = await agg.dailyStats(days);
       } catch (e) {

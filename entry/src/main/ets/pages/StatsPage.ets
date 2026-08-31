@@ -44,7 +44,8 @@ export struct StatsPage {
 
   private async refresh(): Promise<void> {
     try {
-      await this.vm.load();
+      // 显式传入当前周期，与页面顶层 @State period 保持单一数据源，避免 vm 内部缓存旧周期
+      await this.vm.load(this.period);
       // 镜像 VM 结果到顶层 @State：数据进来必然触发 build → 图表 @Prop 更新 → 自动重绘
       this.totals = this.vm.totals;
       this.models = this.vm.models;
