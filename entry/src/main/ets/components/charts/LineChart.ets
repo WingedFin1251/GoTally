@@ -73,15 +73,20 @@ export struct LineChart {
       this.ctx.fillText(formatCompact(val, isZh()), 4, gy + 3);
     }
     this.ctx.globalAlpha = 1;
-    // 右轴刻度（成本等独立量纲）
-    this.ctx.fillStyle = '#999999';
-    this.ctx.textAlign = 'right';
-    for (let g = 0; g <= 4; g++) {
-      const gy = padT + (plotH * g) / 4;
-      const val = maxR - (maxR * g) / 4;
-      this.ctx.fillText(formatCompact(val, isZh()), w - padR + 30, gy + 3);
+    // 右轴刻度（成本等独立量纲；无右轴系列时不绘制）
+    const hasRight = this.series.some((s) => (s.axis ?? 'left') === 'right');
+    if (hasRight) {
+      this.ctx.fillStyle = '#999999';
+      this.ctx.textAlign = 'right';
+      for (let g = 0; g <= 4; g++) {
+        const gy = padT + (plotH * g) / 4;
+        // 收敛 IEEE 754 浮点误差：美元级取整，小值保留两位
+        let val = maxR - (maxR * g) / 4;
+        val = val >= 1 ? Math.round(val) : Number(val.toFixed(2));
+        this.ctx.fillText(formatCompact(val, isZh()), w - padR + 30, gy + 3);
+      }
+      this.ctx.textAlign = 'left';
     }
-    this.ctx.textAlign = 'left';
     // 图例（顶部，按实际文本宽度排布，超宽自动换行避免重叠）
     this.ctx.font = '9vp sans-serif';
     this.ctx.fillStyle = '#999999';

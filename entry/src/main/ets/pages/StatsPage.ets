@@ -75,19 +75,32 @@ export struct StatsPage {
   }
 
   private trendSeries(): LineSeries[] {
-    const costs = this.vm.daily30.map((d) => d.totalCostUsd);
-    const requests = this.vm.daily30.map((d) => d.requestCount);
-    const tokens = this.vm.daily30.map((d) => d.totalInputTokens + d.totalOutputTokens + d.totalReasoningTokens);
     const zh = isZh();
+    if (this.vm.period === Constants.PERIOD_TODAY) {
+      // 「今天」：24 小时逐时趋势（输入/输出/推理，同量纲共左轴）
+      const ins = this.vm.todayTrend.map((d) => d.input);
+      const out = this.vm.todayTrend.map((d) => d.output);
+      const rea = this.vm.todayTrend.map((d) => d.reasoning);
+      return [
+        { name: zh ? '输入' : 'input', color: '#2F6FED', values: ins },
+        { name: zh ? '输出' : 'output', color: '#34A853', values: out },
+        { name: zh ? '推理' : 'reasoning', color: '#FBBC04', values: rea },
+      ];
+    }
+    // 非 today：最近 N 天逐日趋势。Token（亿级）走左轴，成本（美元）走独立右轴，
+    // 请求数量级介于二者之间、共轴会被压缩，故不在趋势图内展示。
+    const costs = this.vm.daily30.map((d) => d.totalCostUsd);
+    const tokens = this.vm.daily30.map((d) => d.totalInputTokens + d.totalOutputTokens + d.totalReasoningTokens);
     return [
-      // 成本量纲（美元）远小于 Token/请求，走独立右轴，避免被压成贴 X 轴的一条线
+      { name: zh ? 'Token' : 'tokens', color: '#34A853', values: tokens },
       { name: zh ? '成本' : 'cost', color: '#EA4335', values: costs, axis: 'right' },
-      { name: zh ? '请求' : 'requests', color: '#2F6FED', values: requests, axis: 'left' },
-      { name: zh ? 'Token' : 'tokens', color: '#34A853', values: tokens, axis: 'left' },
     ];
   }
 
   private trendLabels(): string[] {
+    if (this.vm.period === Constants.PERIOD_TODAY) {
+      return this.vm.todayTrend.map((d) => d.hour);
+    }
     return this.vm.daily30.map((d) => {
       const parts = d.date.split('-');
       return parts.length >= 2 ? `${parts[1]}-${parts[2]}` : d.date;
@@ -202,7 +215,7 @@ export struct StatsPage {
               Text(`${this.modelShare(m)}%`).fontSize(10).fontColor($r('app.color.text_muted')).width(44).textAlign(TextAlign.End)
             }
             .width('100%')
-          }, (m: ModelStat) => m.model)
+          }, (m: ModelStat) => `${m.model}-${this.chartVersion}`)
         }
         .layoutWeight(1)
       }
