@@ -34,7 +34,6 @@ export struct StatsPage {
   private async refresh(): Promise<void> {
     try {
       await this.vm.load();
-      this.chartVersion++;
     } catch (e) {
       // 首次加载失败（如 RDB 初始化竞争）时延迟重试一次，避免页面保持空白
       console.error('Stats load failed: ' + (e instanceof Error ? e.message : String(e)));
@@ -42,6 +41,9 @@ export struct StatsPage {
         this.refreshRetried = true;
         setTimeout(() => { this.refresh(); }, 800);
       }
+    } finally {
+      // 无论成败都递增版本号，强制图表按最新数据重建（避免停留在上一次 period 的旧数据）
+      this.chartVersion++;
     }
   }
 
@@ -78,9 +80,10 @@ export struct StatsPage {
     const tokens = this.vm.daily30.map((d) => d.totalInputTokens + d.totalOutputTokens + d.totalReasoningTokens);
     const zh = isZh();
     return [
-      { name: zh ? '成本' : 'cost', color: '#EA4335', values: costs },
-      { name: zh ? '请求' : 'requests', color: '#2F6FED', values: requests },
-      { name: zh ? 'Token' : 'tokens', color: '#34A853', values: tokens },
+      // 成本量纲（美元）远小于 Token/请求，走独立右轴，避免被压成贴 X 轴的一条线
+      { name: zh ? '成本' : 'cost', color: '#EA4335', values: costs, axis: 'right' },
+      { name: zh ? '请求' : 'requests', color: '#2F6FED', values: requests, axis: 'left' },
+      { name: zh ? 'Token' : 'tokens', color: '#34A853', values: tokens, axis: 'left' },
     ];
   }
 
@@ -183,9 +186,10 @@ export struct StatsPage {
       Row() {
         DonutChart({
           items: this.donutItems(),
-          centerTitle: '总Token',
-          centerValue: formatTokensUi(this.vm.totals.totalInputTokens + this.vm.totals.totalOutputTokens + this.vm.totals.totalReasoningTokens),
+          centerTitle: this.dimTitle(),
+          centerValue: this.dimTotalText(),
         })
+          .key(`donut-${this.chartVersion}`)
           .width(160)
           .height(160)
 
@@ -216,7 +220,7 @@ export struct StatsPage {
     return palette[idx >= 0 ? idx % palette.length : 0];
   }
 
-  /** 模型在当前维度下的占比（百分比，1 位小数）。 */
+  /** 模型在当前维度下的占比（百分比，1 位小数；异常数据钳制到 100）。 */
   private modelShare(m: ModelStat): string {
     let total = 0;
     for (const x of this.vm.models) {
@@ -225,7 +229,24 @@ export struct StatsPage {
     if (total <= 0) {
       return '0.0';
     }
-    return (this.dimValue(m, this.vm.dim) / total * 100).toFixed(1);
+    const pct = Math.min(100, this.dimValue(m, this.vm.dim) / total * 100);
+    return pct.toFixed(1);
+  }
+
+  /** 饼图中心标题：跟随当前维度（DonutChart centerTitle 为 string，需自行按语言取文案）。 */
+  private dimTitle(): string {
+    if (this.vm.dim === 'cost') { return isZh() ? '成本' : 'Cost'; }
+    if (this.vm.dim === 'output') { return isZh() ? '输出' : 'Output'; }
+    return isZh() ? '输入' : 'Input';
+  }
+
+  /** 饼图中心数值：与饼图分项同口径（当前维度分项之和），避免「中心总 Token 与分项不符」的观感。 */
+  private dimTotalText(): string {
+    let total = 0;
+    for (const m of this.vm.models) {
+      total += this.dimValue(m, this.vm.dim);
+    }
+    return this.vm.dim === 'cost' ? formatCost(total, this.currency, this.usdCny) : formatTokensUi(total);
   }
 
   @Builder
@@ -256,6 +277,7 @@ export struct StatsPage {
         series: this.trendSeries(),
         labels: this.trendLabels(),
       })
+        .key(`line-${this.chartVersion}`)
         .width('100%')
         .height(240)
     }

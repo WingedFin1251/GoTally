@@ -22,9 +22,23 @@ export class StatsViewModel {
   async load(): Promise<void> {
     this.loading = true;
     const agg = DataProvider.getAggregator();
-    this.totals = await agg.totals(this.period);
-    this.models = await agg.modelStats(this.period);
-    this.daily30 = await agg.dailyStats(30);
+    // 各项独立 try/catch：单项失败保留旧值并记日志，不让一次失败中断整页刷新
+    // （否则饼图/趋势图会停留在上一次 period 的数据，造成「今天」显示亿级旧数据）。
+    try {
+      this.totals = await agg.totals(this.period);
+    } catch (e) {
+      console.error('load totals failed: ' + (e instanceof Error ? e.message : String(e)));
+    }
+    try {
+      this.models = await agg.modelStats(this.period);
+    } catch (e) {
+      console.error('load modelStats failed: ' + (e instanceof Error ? e.message : String(e)));
+    }
+    try {
+      this.daily30 = await agg.dailyStats(30);
+    } catch (e) {
+      console.error('load dailyStats failed: ' + (e instanceof Error ? e.message : String(e)));
+    }
     this.loading = false;
   }
 }
