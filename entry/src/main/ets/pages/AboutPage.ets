@@ -86,7 +86,10 @@ export struct AboutPage {
             }
             .width('100%')
             .onClick(() => {
-              (getContext(this) as common.UIAbilityContext).openLink('https://github.com/WingedFin1251/GoTally');
+              const lctx = this.getUIContext().getHostContext();
+              if (lctx !== undefined) {
+                (lctx as common.UIAbilityContext).openLink('https://github.com/WingedFin1251/GoTally');
+              }
             })
           }
           .width('100%')

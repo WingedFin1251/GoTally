@@ -107,6 +107,9 @@ export class RdbHelper {
       await store.executeSql('INSERT OR IGNORE INTO usage_sync_state (id) VALUES (1)');
       RdbHelper.store = store;
       return store;
+    } catch (e) {
+      // ArkTS：函数可能抛异常须显式处理；保持向上抛出，由调用方决定策略。
+      throw e instanceof Error ? e : new Error(String(e));
     } finally {
       // 失败时清空，允许下次调用重新初始化；成功时 store 已缓存，直接走快捷路径。
       RdbHelper.initPromise = null;

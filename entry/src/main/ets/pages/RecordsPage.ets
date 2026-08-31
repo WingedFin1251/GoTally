@@ -1,5 +1,4 @@
 // entry/src/main/ets/pages/RecordsPage.ets
-import { promptAction } from '@kit.ArkUI';
 import { RecordsViewModel } from './RecordsViewModel';
 import { Pager } from '../components/ui/Pager';
 import { formatTokensUi, formatCost } from '../common/utils/Formatter';
@@ -45,7 +44,11 @@ export struct RecordsPage {
   /** 「共 N 条」本地化：取模板后手动替换 {0}，避免个别版本 getStringSync 不执行占位符格式化。 */
   private countHint(n: number): string {
     try {
-      const tpl = getContext(this).resourceManager.getStringSync($r('app.string.records_count_hint').id);
+      const ctx = this.getUIContext().getHostContext();
+      if (ctx === undefined) {
+        return `共 ${n} 条`;
+      }
+      const tpl = ctx.resourceManager.getStringSync($r('app.string.records_count_hint').id);
       return tpl.split('{0}').join(`${n}`);
     } catch (e) {
       return `共 ${n} 条`;
@@ -217,11 +220,19 @@ export struct RecordsPage {
               Text(this.timeText(r)).fontSize(11).layoutWeight(2).fontColor($r('app.color.text_secondary')).maxLines(1)
                 .textOverflow({ overflow: TextOverflow.Ellipsis })
                 .onClick(() => {
-                  promptAction.showToast({ message: r.createdAt === '' ? '--' : r.createdAt });
+                  try {
+                    this.getUIContext().getPromptAction().showToast({ message: r.createdAt === '' ? '--' : r.createdAt });
+                  } catch (e) {
+                    console.error('toast failed: ' + (e instanceof Error ? e.message : String(e)));
+                  }
                 })
               Text(r.model).fontSize(11).layoutWeight(3).fontColor($r('app.color.text_primary')).maxLines(2).textOverflow({ overflow: TextOverflow.Ellipsis })
                 .onClick(() => {
-                  promptAction.showToast({ message: r.model });
+                  try {
+                    this.getUIContext().getPromptAction().showToast({ message: r.model });
+                  } catch (e) {
+                    console.error('toast failed: ' + (e instanceof Error ? e.message : String(e)));
+                  }
                 })
               Text(formatTokensUi(r.inputTokens)).fontSize(11).layoutWeight(1).textAlign(TextAlign.End).fontColor($r('app.color.text_secondary'))
               Text(formatTokensUi(r.outputTokens)).fontSize(11).layoutWeight(1).textAlign(TextAlign.End).fontColor($r('app.color.text_secondary'))

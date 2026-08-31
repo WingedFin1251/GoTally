@@ -1,5 +1,4 @@
 // entry/src/main/ets/pages/SettingsPage.ets
-import { router, promptAction } from '@kit.ArkUI';
 import { SettingsStore } from '../data/SettingsStore';
 import type { AppSettings } from '../data/SettingsStore';
 import { DataProvider } from '../data/DataProvider';
@@ -72,17 +71,21 @@ export struct SettingsPage {
     }
     let msg: string = '';
     try {
-      const rm = getContext(this).resourceManager;
-      if (p.phase === 'done') {
-        msg = rm.getStringSync($r('app.string.sync_done').id, p.inserted);
-      } else {
-        const base = rm.getStringSync($r('app.string.sync_error').id);
-        msg = p.message !== '' ? `${base}: ${p.message}` : base;
+      const ctx = this.getUIContext().getHostContext();
+      if (ctx !== undefined) {
+        const rm = ctx.resourceManager;
+        if (p.phase === 'done') {
+          const tpl = rm.getStringSync($r('app.string.sync_done').id);
+          msg = tpl.split('{0}').join(`${p.inserted}`);
+        } else {
+          const base = rm.getStringSync($r('app.string.sync_error').id);
+          msg = p.message !== '' ? `${base}: ${p.message}` : base;
+        }
       }
     } catch (e) {
       msg = p.phase === 'done' ? `同步完成，新增 ${p.inserted} 条` : '同步失败';
     }
-    promptAction.showToast({ message: msg });
+    this.showToastSafe(msg);
     // 通知其他页面（首页、统计页）数据已变更，触发自动刷新
     AppStorage.setOrCreate('syncFinishedVersion',
       (AppStorage.get('syncFinishedVersion') as number ?? 0) + 1);
@@ -127,7 +130,7 @@ export struct SettingsPage {
           }
           SettingRow({ title: $r('app.string.set_login_method'), desc: $r('app.string.login_method_desc') }) {
             Button($r('app.string.relogin')).fontSize(12).height(30).onClick(() => {
-              router.pushUrl({ url: 'pages/Login' });
+              this.getUIContext().getRouter().pushUrl({ url: 'pages/Login' });
             })
           }
           SettingRow({ title: $r('app.string.logout'), desc: $r('app.string.logout_desc') }) {
@@ -206,12 +209,15 @@ export struct SettingsPage {
                 setLanguage(v);
                 // 应用级语言切换，界面文案立即生效
                 try {
-                  (getContext(this) as common.UIAbilityContext).getApplicationContext()
-                    .setLanguage(v === 'zh' ? 'zh-CN' : 'en-US');
+                  const lctx = this.getUIContext().getHostContext();
+                  if (lctx !== undefined) {
+                    lctx.getApplicationContext()
+                      .setLanguage(v === 'zh' ? 'zh-CN' : 'en-US');
+                  }
                 } catch (e) {
                   console.error('setLanguage failed: ' + (e instanceof Error ? e.message : String(e)));
                 }
-                promptAction.showToast({ message: v === 'zh' ? '已切换为中文' : 'Switched to English' });
+                this.showToastSafe(v === 'zh' ? '已切换为中文' : 'Switched to English');
               })
           }
         }
@@ -227,7 +233,10 @@ export struct SettingsPage {
           SettingRow({ title: $r('app.string.current_version'), desc: '1.0.0' }) {}
           SettingRow({ title: $r('app.string.check_update'), desc: $r('app.string.check_update_desc') }) {
             Button($r('app.string.check_update_btn')).fontSize(12).height(30).onClick(() => {
-              (getContext(this) as common.UIAbilityContext).openLink('https://github.com/WingedFin1251/GoTally/releases');
+              const lctx = this.getUIContext().getHostContext();
+              if (lctx !== undefined) {
+                (lctx as common.UIAbilityContext).openLink('https://github.com/WingedFin1251/GoTally/releases');
+              }
             })
           }
         }
@@ -264,9 +273,17 @@ export struct SettingsPage {
     const data = pasteboard.createData(pasteboard.MIMETYPE_TEXT_PLAIN, this.workspace);
     try {
       await pasteboard.getSystemPasteboard().setData(data);
-      promptAction.showToast({ message: '已复制' });
+      this.showToastSafe('已复制');
     } catch (e) {
-      promptAction.showToast({ message: '复制失败' });
+      this.showToastSafe('复制失败');
+    }
+  }
+
+  private showToastSafe(msg: string): void {
+    try {
+      this.getUIContext().getPromptAction().showToast({ message: msg });
+    } catch (e) {
+      console.error('toast failed: ' + (e instanceof Error ? e.message : String(e)));
     }
   }
 
@@ -276,27 +293,37 @@ export struct SettingsPage {
   }
 
   private confirmLogout(): void {
-    AlertDialog.show({
-      title: $r('app.string.confirm_title'),
-      message: $r('app.string.logout_confirm_msg'),
-      primaryButton: {
-        value: $r('app.string.cancel'), action: () => {},
-      },
-      secondaryButton: {
-        value: $r('app.string.ok'), action: async () => {
-          await DataProvider.getStore().clearAccount();
-          AppStorage.setOrCreate('logoutVersion', (AppStorage.get('logoutVersion') as number ?? 0) + 1);
-          this.load();
+    try {
+      this.getUIContext().showAlertDialog({
+        title: $r('app.string.confirm_title'),
+        message: $r('app.string.logout_confirm_msg'),
+        primaryButton: {
+          value: $r('app.string.cancel'), action: () => {},
         },
-      },
-    });
+        secondaryButton: {
+          value: $r('app.string.ok'), action: async () => {
+            await DataProvider.getStore().clearAccount();
+            AppStorage.setOrCreate('logoutVersion', (AppStorage.get('logoutVersion') as number ?? 0) + 1);
+            this.load();
+          },
+        },
+      });
+    } catch (e) {
+      console.error('alert failed: ' + (e instanceof Error ? e.message : String(e)));
+    }
   }
 
   private applyTheme(mode: string): void {
-    const ctx = getContext(this);
     const colorMode = mode === 'dark'
       ? ConfigurationConstant.ColorMode.COLOR_MODE_DARK
       : ConfigurationConstant.ColorMode.COLOR_MODE_LIGHT;
-    ctx.getApplicationContext().setColorMode(colorMode);
+    try {
+      const ctx = this.getUIContext().getHostContext();
+      if (ctx !== undefined) {
+        ctx.getApplicationContext().setColorMode(colorMode);
+      }
+    } catch (e) {
+      console.error('applyTheme failed: ' + (e instanceof Error ? e.message : String(e)));
+    }
   }
 }

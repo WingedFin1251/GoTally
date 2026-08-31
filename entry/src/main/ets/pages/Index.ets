@@ -1,5 +1,5 @@
 // entry/src/main/ets/pages/Index.ets
-import { router, window } from '@kit.ArkUI';
+import { window } from '@kit.ArkUI';
 import { HdsTabs, HdsTabsController, HdsTabsFloatingStyle, hdsMaterial } from '@kit.UIDesignKit';
 import { DataProvider } from '../data/DataProvider';
 import { SettingsStore } from '../data/SettingsStore';
@@ -43,12 +43,16 @@ struct Index {
    */
   private async resolveSystemInsets(): Promise<void> {
     try {
-      const win = await window.getLastWindow(getContext(this));
+      const hostCtx = this.getUIContext().getHostContext();
+      if (hostCtx === undefined) {
+        throw new Error('host context unavailable');
+      }
+      const win = await window.getLastWindow(hostCtx);
       const sys = win.getWindowAvoidArea(window.AvoidAreaType.TYPE_SYSTEM);
       const nav = win.getWindowAvoidArea(window.AvoidAreaType.TYPE_NAVIGATION_INDICATOR);
       // getWindowAvoidArea 返回单位是 px，转成 vp 后再用于布局内边距
-      const top = px2vp(sys.topRect.height);
-      const bottom = px2vp(nav.bottomRect.height > 0 ? nav.bottomRect.height : sys.bottomRect.height);
+      const top = this.getUIContext().px2vp(sys.topRect.height);
+      const bottom = this.getUIContext().px2vp(nav.bottomRect.height > 0 ? nav.bottomRect.height : sys.bottomRect.height);
       this.navIndicatorHeight = bottom;
       AppStorage.setOrCreate('statusBarHeight', top);
       AppStorage.setOrCreate('navIndicatorHeight', bottom);
@@ -115,7 +119,7 @@ struct Index {
         .width(200)
         .height(44)
         .onClick(() => {
-          router.pushUrl({ url: 'pages/Login' });
+          this.getUIContext().getRouter().pushUrl({ url: 'pages/Login' });
         })
     }
     .width('100%')

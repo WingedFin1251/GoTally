@@ -1,5 +1,4 @@
 // entry/src/main/ets/pages/Login.ets
-import { router } from '@kit.ArkUI';
 import { webview } from '@kit.ArkWeb';
 import { OpenCodeApi } from '../network/OpenCodeApi';
 import { DataProvider } from '../data/DataProvider';
@@ -19,7 +18,12 @@ struct Login {
     if (this.done) {
       return;
     }
-    const cookies = webview.WebCookieManager.fetchCookieSync(Constants.LOGIN_COOKIE_DOMAIN);
+    let cookies: string = '';
+    try {
+      cookies = webview.WebCookieManager.fetchCookieSync(Constants.LOGIN_COOKIE_DOMAIN);
+    } catch (e) {
+      cookies = '';
+    }
     if (cookies === null || cookies === '') {
       return;
     }
@@ -40,7 +44,7 @@ struct Login {
     await DataProvider.getStore().saveToken(`auth=${authValue}`, workspaceHint);
     // 触发首次全量同步（后台）
     DataProvider.getSyncManager().sync('full');
-    router.back();
+    this.getUIContext().getRouter().back();
   }
 
   build() {
@@ -52,7 +56,7 @@ struct Login {
         Blank()
         Button('取消')
           .fontSize(14)
-          .onClick(() => router.back())
+          .onClick(() => this.getUIContext().getRouter().back())
       }
       .width('100%')
       .padding(12)
@@ -67,17 +71,8 @@ struct Login {
         .onPageBegin((event) => {
           this.loading = false;
         })
-        .onUrlLoadIntercept((event) => {
-          if (event === undefined) {
-            return false;
-          }
-          const data = event.data;
-          let url: string;
-          if (typeof data === 'string') {
-            url = data;
-          } else {
-            url = data.getRequestUrl();
-          }
+        .onLoadIntercept((event) => {
+          const url: string = event.data.getRequestUrl();
           if (url.startsWith('https://opencode.ai')) {
             this.captureAndFinish(url);
           }
