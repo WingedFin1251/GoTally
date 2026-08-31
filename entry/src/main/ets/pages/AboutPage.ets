@@ -103,9 +103,10 @@ export struct AboutPage {
             .textAlign(TextAlign.Center)
             .margin({ top: 4, bottom: 8 })
         }
+        .width('100%')
         .justifyContent(FlexAlign.Start)
         .alignItems(HorizontalAlign.Start)
-        .padding({ left: 12, right: 12, top: this.statusBarHeight + 64, bottom: 96 })
+        .padding({ left: 12, right: 12, top: this.statusBarHeight + 52, bottom: 96 })
       }
       .width('100%')
       .height('100%')

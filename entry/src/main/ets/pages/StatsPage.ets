@@ -18,11 +18,17 @@ export struct StatsPage {
   @StorageProp('usdCny') usdCny: number = Constants.DEFAULT_USD_CNY;
   @StorageProp('statusBarHeight') statusBarHeight: number = 0;
   @StorageProp('navIndicatorHeight') navIndicatorHeight: number = 0;
+  @Watch('onSyncFinished') @StorageProp('syncFinishedVersion') syncFinishedVersion: number = 0;
   private refreshRetried: boolean = false;
 
   aboutToAppear(): void {
     this.refresh();
     this.initCurrency();
+  }
+
+  /** 其他页面（设置页）同步完成后自动刷新统计页数据。 */
+  private onSyncFinished(): void {
+    this.refresh();
   }
 
   private async refresh(): Promise<void> {
@@ -269,7 +275,8 @@ export struct StatsPage {
           this.ModelRank()
           this.TrendCard()
         }
-        .padding({ left: 12, right: 12, top: this.statusBarHeight + 64, bottom: 96 })
+        .width('100%')
+        .padding({ left: 12, right: 12, top: this.statusBarHeight + 52, bottom: 96 })
       }
       .width('100%')
       .height('100%')

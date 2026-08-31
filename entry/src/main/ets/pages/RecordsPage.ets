@@ -225,7 +225,8 @@ export struct RecordsPage {
           this.SessionsCard()
           this.RecordsCard()
         }
-        .padding({ left: 12, right: 12, top: this.statusBarHeight + 64, bottom: 96 })
+        .width('100%')
+        .padding({ left: 12, right: 12, top: this.statusBarHeight + 52, bottom: 96 })
       }
       .width('100%')
       .height('100%')
