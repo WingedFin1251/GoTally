@@ -9,8 +9,8 @@ export interface DonutItem {
 @Component
 export struct DonutChart {
   @Watch('redraw') @Prop items: DonutItem[] = [];
-  /** 渲染版本号：父组件每次整体更新数据/维度都 +1，强制重绘，避免 @Prop 判定「未变化」导致中心文字滞旧。 */
-  @Watch('redraw') @Prop version: number = 0;
+  /** 渲染版本号：父组件每次整体更新数据/维度都 +1，供父层用 if 奇偶分支强制重建 Canvas。 */
+  @Prop version: number = 0;
   @Prop centerTitle: string = '';
   @Prop centerValue: string = '';
   private settings: RenderingContextSettings = new RenderingContextSettings(true);
@@ -63,22 +63,37 @@ export struct DonutChart {
       this.ctx.globalCompositeOperation = 'source-over';
       start += sweep;
     }
-    // 中心文字
-    this.ctx.fillStyle = '#1a1a1a';
-    this.ctx.font = 'bold 14vp sans-serif';
-    this.ctx.textAlign = 'center';
-    this.ctx.fillText(this.centerValue, cx, cy - 2);
-    this.ctx.font = '10vp sans-serif';
-    this.ctx.fillStyle = '#999999';
-    this.ctx.fillText(this.centerTitle, cx, cy + 14);
+    // 中心文字改为 UI 层 Text 渲染（见 build），保证与父组件数据同帧刷新，不依赖 Canvas 重绘
   }
 
   build() {
-    Canvas(this.ctx)
+    Stack({ alignContent: Alignment.Center }) {
+      Canvas(this.ctx)
+        .width('100%')
+        .height('100%')
+        .onReady(() => {
+          this.redraw();
+        })
+      // 中心文字用声明式 Text：父组件 build 传新值即自动刷新（与图例同一可靠机制），
+      // 不再依赖 Canvas 重绘时机，彻底消除「中心数字滞旧」。
+      Column({ space: 2 }) {
+        Text(this.centerValue)
+          .fontSize(16)
+          .fontWeight(FontWeight.Bold)
+          .fontColor($r('app.color.text_primary'))
+          .maxLines(1)
+          .textOverflow({ overflow: TextOverflow.Ellipsis })
+        Text(this.centerTitle)
+          .fontSize(10)
+          .fontColor($r('app.color.text_muted'))
+          .maxLines(1)
+          .textOverflow({ overflow: TextOverflow.Ellipsis })
+      }
       .width('100%')
-      .height('100%')
-      .onReady(() => {
-        this.redraw();
-      })
+      .alignItems(HorizontalAlign.Center)
+      .padding({ left: 20, right: 20 })
+    }
+    .width('100%')
+    .height('100%')
   }
 }

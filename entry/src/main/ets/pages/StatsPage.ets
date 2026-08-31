@@ -242,14 +242,26 @@ export struct StatsPage {
       .width('100%')
 
       Row() {
-        DonutChart({
-          items: this.donutItems(),
-          centerTitle: this.dimTitle(),
-          centerValue: this.dimTotalText(),
-          version: this.chart.version,
-        })
-          .width(160)
-          .height(160)
+        // if 奇偶分支：version 递增即切换分支，强制销毁重建 Canvas（key() 仅测试目录可用，不可依赖）
+        if ((this.chart.version & 1) === 0) {
+          DonutChart({
+            items: this.donutItems(),
+            centerTitle: this.dimTitle(),
+            centerValue: this.dimTotalText(),
+            version: this.chart.version,
+          })
+            .width(160)
+            .height(160)
+        } else {
+          DonutChart({
+            items: this.donutItems(),
+            centerTitle: this.dimTitle(),
+            centerValue: this.dimTotalText(),
+            version: this.chart.version,
+          })
+            .width(160)
+            .height(160)
+        }
 
         Column({ space: 6 }) {
           ForEach(this.chart.models.slice(0, 6), (m: ModelStat) => {
@@ -352,13 +364,23 @@ export struct StatsPage {
         Blank()
       }
       .width('100%')
-      LineChart({
-        series: this.trendSeries(),
-        labels: this.trendLabels(),
-        version: this.chart.version,
-      })
-        .width('100%')
-        .height(240)
+      if ((this.chart.version & 1) === 0) {
+        LineChart({
+          series: this.trendSeries(),
+          labels: this.trendLabels(),
+          version: this.chart.version,
+        })
+          .width('100%')
+          .height(240)
+      } else {
+        LineChart({
+          series: this.trendSeries(),
+          labels: this.trendLabels(),
+          version: this.chart.version,
+        })
+          .width('100%')
+          .height(240)
+      }
     }
     .width('100%')
     .padding(12)
