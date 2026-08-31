@@ -9,6 +9,8 @@ export interface DonutItem {
 @Component
 export struct DonutChart {
   @Watch('redraw') @Prop items: DonutItem[] = [];
+  /** 渲染版本号：父组件每次整体更新数据/维度都 +1，强制重绘，避免 @Prop 判定「未变化」导致中心文字滞旧。 */
+  @Watch('redraw') @Prop version: number = 0;
   @Prop centerTitle: string = '';
   @Prop centerValue: string = '';
   private settings: RenderingContextSettings = new RenderingContextSettings(true);

@@ -246,6 +246,7 @@ export struct StatsPage {
           items: this.donutItems(),
           centerTitle: this.dimTitle(),
           centerValue: this.dimTotalText(),
+          version: this.chart.version,
         })
           .width(160)
           .height(160)
@@ -354,6 +355,7 @@ export struct StatsPage {
       LineChart({
         series: this.trendSeries(),
         labels: this.trendLabels(),
+        version: this.chart.version,
       })
         .width('100%')
         .height(240)
