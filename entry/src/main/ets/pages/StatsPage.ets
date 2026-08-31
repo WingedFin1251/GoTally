@@ -12,19 +12,27 @@ import type { Totals, ModelStat, DailyStat, TrendPoint } from '../model/Stats';
 
 const EMPTY_TOTALS: Totals = { requestCount: 0, sessionCount: 0, totalInputTokens: 0, uncachedInputTokens: 0, totalReasoningTokens: 0, cacheHitTokens: 0, cacheWriteTokens: 0, totalOutputTokens: 0, totalCostUsd: 0, hitRate: 0 };
 
+/** 统计页渲染快照：周期 + 维度 + 全部展示数据 + 版本号。
+ *  任何变化（切周期/切维度/数据加载完成）都以「整体替换」方式赋值，
+ *  保证中心数字、图例分项、趋势图在同一帧读到同一版本的数据，杜绝交叉污染。 */
+interface ChartSnapshot {
+  period: string;
+  dim: 'input' | 'output' | 'cost';
+  totals: Totals;
+  models: ModelStat[];
+  daily30: DailyStat[];
+  todayTrend: TrendPoint[];
+  version: number;
+}
+
+const EMPTY_CHART: ChartSnapshot = { period: '7d', dim: 'input', totals: EMPTY_TOTALS, models: [], daily30: [], todayTrend: [], version: 0 };
+
 @Component
 export struct StatsPage {
-  // 图表/列表依赖的展示数据全部上提到顶层 @State：赋值即触发本章 build，
-  // DonutChart/LineChart 通过 @Prop 接收新值后由 @Watch 自动重绘，无需 key 强制重建。
-  @State period: string = '7d';
-  @State dim: 'input' | 'output' | 'cost' = 'input';
-  @State totals: Totals = EMPTY_TOTALS;
-  @State models: ModelStat[] = [];
-  @State daily30: DailyStat[] = [];
-  @State todayTrend: TrendPoint[] = [];
-  /** 数据版本号：每次加载完成后 +1，作为 ForEach 的 key 后缀，强制模型列表项重建（读取最新数据）。 */
-  @State dataVersion: number = 0;
+  @State chart: ChartSnapshot = EMPTY_CHART;
   private vm: StatsViewModel = new StatsViewModel();
+  /** 请求序号：只采纳最后一次刷新的结果，丢弃竞态中迟到的旧数据。 */
+  private reqSeq: number = 0;
   @StorageProp('currency') currency: string = 'CNY';
   @StorageProp('usdCny') usdCny: number = Constants.DEFAULT_USD_CNY;
   @StorageProp('statusBarHeight') statusBarHeight: number = 0;
@@ -43,23 +51,33 @@ export struct StatsPage {
   }
 
   private async refresh(): Promise<void> {
+    const seq = ++this.reqSeq;
     try {
-      // 显式传入当前周期，与页面顶层 @State period 保持单一数据源，避免 vm 内部缓存旧周期
-      await this.vm.load(this.period);
-      // 镜像 VM 结果到顶层 @State：数据进来必然触发 build → 图表 @Prop 更新 → 自动重绘
-      this.totals = this.vm.totals;
-      this.models = this.vm.models;
-      this.daily30 = this.vm.daily30;
-      this.todayTrend = this.vm.todayTrend;
+      await this.vm.load(this.chart.period);
+      if (seq !== this.reqSeq) {
+        return; // 已有更新的刷新请求，丢弃本次迟到结果
+      }
+      // 一次性整体替换快照：中心、图例、趋势图同帧读到同一版本
+      const next: ChartSnapshot = {
+        period: this.chart.period,
+        dim: this.chart.dim,
+        totals: this.vm.totals,
+        models: this.vm.models,
+        daily30: this.vm.daily30,
+        todayTrend: this.vm.todayTrend,
+        version: this.chart.version + 1,
+      };
+      this.chart = next;
     } catch (e) {
+      if (seq !== this.reqSeq) {
+        return;
+      }
       // 首次加载失败（如 RDB 初始化竞争）时延迟重试一次，避免页面保持空白
       console.error('Stats load failed: ' + (e instanceof Error ? e.message : String(e)));
       if (!this.refreshRetried) {
         this.refreshRetried = true;
         setTimeout(() => { this.refresh(); }, 800);
       }
-    } finally {
-      this.dataVersion++;
     }
   }
 
@@ -75,38 +93,37 @@ export struct StatsPage {
   }
 
   private formatDimValue(m: ModelStat): string {
-    if (this.dim === 'cost') {
+    if (this.chart.dim === 'cost') {
       return formatCost(this.dimValue(m, 'cost'), this.currency, this.usdCny);
     }
-    return formatTokensUi(this.dimValue(m, this.dim));
+    return formatTokensUi(this.dimValue(m, this.chart.dim));
   }
 
   private donutItems(): DonutItem[] {
     const palette = ['#2F6FED', '#34A853', '#FBBC04', '#EA4335', '#9334E6', '#00ACC1'];
     const items: DonutItem[] = [];
-    this.models.forEach((m, i) => {
-      items.push({ label: m.model, value: this.dimValue(m, this.dim), color: palette[i % palette.length] });
+    this.chart.models.forEach((m, i) => {
+      items.push({ label: m.model, value: this.dimValue(m, this.chart.dim), color: palette[i % palette.length] });
     });
     return items;
   }
 
   private trendSeries(): LineSeries[] {
     const zh = isZh();
-    if (this.period === Constants.PERIOD_TODAY) {
+    if (this.chart.period === Constants.PERIOD_TODAY) {
       // 「今天」：24 小时逐时趋势（输入/输出/推理，同量纲共左轴）
-      const ins = this.todayTrend.map((d) => d.input);
-      const out = this.todayTrend.map((d) => d.output);
-      const rea = this.todayTrend.map((d) => d.reasoning);
+      const ins = this.chart.todayTrend.map((d) => d.input);
+      const out = this.chart.todayTrend.map((d) => d.output);
+      const rea = this.chart.todayTrend.map((d) => d.reasoning);
       return [
         { name: zh ? '输入' : 'input', color: '#2F6FED', values: ins },
         { name: zh ? '输出' : 'output', color: '#34A853', values: out },
         { name: zh ? '推理' : 'reasoning', color: '#FBBC04', values: rea },
       ];
     }
-    // 非 today：最近 N 天逐日趋势。Token（亿级）走左轴、成本（美元）走独立右轴，
-    // 请求数量级介于二者之间、共轴会被压缩，故不在趋势图内展示。
-    const costs = this.daily30.map((d) => d.totalCostUsd);
-    const tokens = this.daily30.map((d) => d.totalInputTokens + d.totalOutputTokens + d.totalReasoningTokens);
+    // 非 today：最近 N 天逐日趋势。Token（亿级）走左轴、成本（美元）走独立右轴。
+    const costs = this.chart.daily30.map((d) => d.totalCostUsd);
+    const tokens = this.chart.daily30.map((d) => d.totalInputTokens + d.totalOutputTokens + d.totalReasoningTokens);
     return [
       { name: zh ? 'Token' : 'tokens', color: '#34A853', values: tokens },
       { name: zh ? '成本' : 'cost', color: '#EA4335', values: costs, axis: 'right' },
@@ -114,10 +131,10 @@ export struct StatsPage {
   }
 
   private trendLabels(): string[] {
-    if (this.period === Constants.PERIOD_TODAY) {
-      return this.todayTrend.map((d) => d.hour);
+    if (this.chart.period === Constants.PERIOD_TODAY) {
+      return this.chart.todayTrend.map((d) => d.hour);
     }
-    return this.daily30.map((d) => {
+    return this.chart.daily30.map((d) => {
       const parts = d.date.split('-');
       return parts.length >= 2 ? `${parts[1]}-${parts[2]}` : d.date;
     });
@@ -139,10 +156,22 @@ export struct StatsPage {
       .fontSize(12)
       .padding({ left: 12, right: 12, top: 5, bottom: 5 })
       .borderRadius(14)
-      .backgroundColor(this.period === period ? $r('app.color.accent') : $r('app.color.divider'))
-      .fontColor(this.period === period ? Color.White : $r('app.color.text_secondary'))
+      .backgroundColor(this.chart.period === period ? $r('app.color.accent') : $r('app.color.divider'))
+      .fontColor(this.chart.period === period ? Color.White : $r('app.color.text_secondary'))
       .onClick(() => {
-        this.period = period;
+        if (this.chart.period === period) {
+          return;
+        }
+        // 先整体替换快照更新高亮（不触发数据加载），随后异步加载并整体替换数据快照
+        this.chart = {
+          period: period,
+          dim: this.chart.dim,
+          totals: this.chart.totals,
+          models: this.chart.models,
+          daily30: this.chart.daily30,
+          todayTrend: this.chart.todayTrend,
+          version: this.chart.version,
+        };
         this.refresh();
       })
   }
@@ -152,13 +181,13 @@ export struct StatsPage {
     // Row/Column 两列布局（Grid 在 Scroll 内无高度会折叠）
     Column({ space: 10 }) {
       Row({ space: 10 }) {
-        StatCard({ title: $r('app.string.total_input'), value: formatTokensUi(this.totals.totalInputTokens), sub: '', accent: false }).layoutWeight(1)
-        StatCard({ title: $r('app.string.output'), value: formatTokensUi(this.totals.totalOutputTokens), sub: '', accent: false }).layoutWeight(1)
+        StatCard({ title: $r('app.string.total_input'), value: formatTokensUi(this.chart.totals.totalInputTokens), sub: '', accent: false }).layoutWeight(1)
+        StatCard({ title: $r('app.string.output'), value: formatTokensUi(this.chart.totals.totalOutputTokens), sub: '', accent: false }).layoutWeight(1)
       }
       .width('100%')
       Row({ space: 10 }) {
-        StatCard({ title: $r('app.string.reasoning'), value: formatTokensUi(this.totals.totalReasoningTokens), sub: '', accent: false }).layoutWeight(1)
-        StatCard({ title: $r('app.string.cost'), value: formatCost(this.totals.totalCostUsd, this.currency, this.usdCny), sub: '', accent: true }).layoutWeight(1)
+        StatCard({ title: $r('app.string.reasoning'), value: formatTokensUi(this.chart.totals.totalReasoningTokens), sub: '', accent: false }).layoutWeight(1)
+        StatCard({ title: $r('app.string.cost'), value: formatCost(this.chart.totals.totalCostUsd, this.currency, this.usdCny), sub: '', accent: true }).layoutWeight(1)
       }
       .width('100%')
     }
@@ -172,18 +201,18 @@ export struct StatsPage {
       // Row/Column 两列布局（Grid 在 Scroll 内无高度会折叠）
       Column({ space: 10 }) {
         Row({ space: 10 }) {
-          StatCard({ title: $r('app.string.uncached_input'), value: formatTokensUi(this.totals.uncachedInputTokens), sub: '', accent: false }).layoutWeight(1)
-          StatCard({ title: $r('app.string.output'), value: formatTokensUi(this.totals.totalOutputTokens), sub: '', accent: false }).layoutWeight(1)
+          StatCard({ title: $r('app.string.uncached_input'), value: formatTokensUi(this.chart.totals.uncachedInputTokens), sub: '', accent: false }).layoutWeight(1)
+          StatCard({ title: $r('app.string.output'), value: formatTokensUi(this.chart.totals.totalOutputTokens), sub: '', accent: false }).layoutWeight(1)
         }
         .width('100%')
         Row({ space: 10 }) {
-          StatCard({ title: $r('app.string.reasoning'), value: formatTokensUi(this.totals.totalReasoningTokens), sub: '', accent: false }).layoutWeight(1)
-          StatCard({ title: $r('app.string.cache_read'), value: formatTokensUi(this.totals.cacheHitTokens), sub: '', accent: false }).layoutWeight(1)
+          StatCard({ title: $r('app.string.reasoning'), value: formatTokensUi(this.chart.totals.totalReasoningTokens), sub: '', accent: false }).layoutWeight(1)
+          StatCard({ title: $r('app.string.cache_read'), value: formatTokensUi(this.chart.totals.cacheHitTokens), sub: '', accent: false }).layoutWeight(1)
         }
         .width('100%')
         Row({ space: 10 }) {
-          StatCard({ title: $r('app.string.cache_write'), value: formatTokensUi(this.totals.cacheWriteTokens), sub: '', accent: false }).layoutWeight(1)
-          StatCard({ title: $r('app.string.ov_sessions'), value: `${this.totals.sessionCount}`, sub: '', accent: false }).layoutWeight(1)
+          StatCard({ title: $r('app.string.cache_write'), value: formatTokensUi(this.chart.totals.cacheWriteTokens), sub: '', accent: false }).layoutWeight(1)
+          StatCard({ title: $r('app.string.ov_sessions'), value: `${this.chart.totals.sessionCount}`, sub: '', accent: false }).layoutWeight(1)
         }
         .width('100%')
       }
@@ -222,7 +251,7 @@ export struct StatsPage {
           .height(160)
 
         Column({ space: 6 }) {
-          ForEach(this.models.slice(0, 6), (m: ModelStat) => {
+          ForEach(this.chart.models.slice(0, 6), (m: ModelStat) => {
             Row({ space: 6 }) {
               Text('●').fontSize(10).fontColor(this.modelColor(m.model))
               Text(m.model).fontSize(12).fontColor($r('app.color.text_primary')).layoutWeight(1).maxLines(1)
@@ -232,7 +261,7 @@ export struct StatsPage {
               Text(`${this.modelShare(m)}%`).fontSize(10).fontColor($r('app.color.text_muted')).width(44).textAlign(TextAlign.End)
             }
             .width('100%')
-          }, (m: ModelStat) => `${m.model}-${this.dataVersion}`)
+          }, (m: ModelStat) => `${m.model}-${this.chart.version}-${this.chart.dim}`)
         }
         .layoutWeight(1)
       }
@@ -246,7 +275,7 @@ export struct StatsPage {
 
   private modelColor(model: string): string {
     const palette = ['#2F6FED', '#34A853', '#FBBC04', '#EA4335', '#9334E6', '#00ACC1'];
-    const idx = this.models.findIndex((m) => m.model === model);
+    const idx = this.chart.models.findIndex((m) => m.model === model);
     return palette[idx >= 0 ? idx % palette.length : 0];
   }
 
@@ -261,30 +290,30 @@ export struct StatsPage {
   /** 模型在当前维度下的占比（百分比，1 位小数；异常数据钳制到 100）。 */
   private modelShare(m: ModelStat): string {
     let total = 0;
-    for (const x of this.models) {
-      total += this.dimValue(x, this.dim);
+    for (const x of this.chart.models) {
+      total += this.dimValue(x, this.chart.dim);
     }
     if (total <= 0) {
       return '0.0';
     }
-    const pct = Math.min(100, this.dimValue(m, this.dim) / total * 100);
+    const pct = Math.min(100, this.dimValue(m, this.chart.dim) / total * 100);
     return pct.toFixed(1);
   }
 
   /** 饼图中心标题：跟随当前维度（DonutChart centerTitle 为 string，需自行按语言取文案）。 */
   private dimTitle(): string {
-    if (this.dim === 'cost') { return isZh() ? '成本' : 'Cost'; }
-    if (this.dim === 'output') { return isZh() ? '输出' : 'Output'; }
+    if (this.chart.dim === 'cost') { return isZh() ? '成本' : 'Cost'; }
+    if (this.chart.dim === 'output') { return isZh() ? '输出' : 'Output'; }
     return isZh() ? '输入' : 'Input';
   }
 
-  /** 饼图中心数值：与饼图分项同口径（当前维度分项之和），避免「中心总 Token 与分项不符」的观感。 */
+  /** 饼图中心数值：与饼图分项同口径（当前维度分项之和）。 */
   private dimTotalText(): string {
     let total = 0;
-    for (const m of this.models) {
-      total += this.dimValue(m, this.dim);
+    for (const m of this.chart.models) {
+      total += this.dimValue(m, this.chart.dim);
     }
-    return this.dim === 'cost' ? formatCost(total, this.currency, this.usdCny) : formatTokensUi(total);
+    return this.chart.dim === 'cost' ? formatCost(total, this.currency, this.usdCny) : formatTokensUi(total);
   }
 
   @Builder
@@ -295,10 +324,22 @@ export struct StatsPage {
       .borderRadius(10)
       .maxLines(1)
       .textOverflow({ overflow: TextOverflow.Ellipsis })
-      .backgroundColor(this.dim === dim ? $r('app.color.accent') : $r('app.color.divider'))
-      .fontColor(this.dim === dim ? Color.White : $r('app.color.text_secondary'))
+      .backgroundColor(this.chart.dim === dim ? $r('app.color.accent') : $r('app.color.divider'))
+      .fontColor(this.chart.dim === dim ? Color.White : $r('app.color.text_secondary'))
       .onClick(() => {
-        this.dim = dim as 'input' | 'output' | 'cost';
+        if (this.chart.dim === dim) {
+          return;
+        }
+        // 整体替换快照（维度 + 版本号），图例随 version 变化强制重建，与中心同帧更新
+        this.chart = {
+          period: this.chart.period,
+          dim: dim as 'input' | 'output' | 'cost',
+          totals: this.chart.totals,
+          models: this.chart.models,
+          daily30: this.chart.daily30,
+          todayTrend: this.chart.todayTrend,
+          version: this.chart.version + 1,
+        };
       })
   }
 
