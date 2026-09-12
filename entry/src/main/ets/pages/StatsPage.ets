@@ -420,6 +420,7 @@ export struct StatsPage {
       .backgroundColor($r('app.color.bg_page'))
       .expandSafeArea([SafeAreaType.SYSTEM], [SafeAreaEdge.BOTTOM])
       .scrollBar(BarState.Off)
+      .edgeEffect(EdgeEffect.Spring, { alwaysEnabled: true })
       .onScrollFrameBegin((offset: number) => {
         this.handleNavScroll(offset);
         return { offsetRemain: offset };
