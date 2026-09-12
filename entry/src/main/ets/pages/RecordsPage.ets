@@ -186,6 +186,42 @@ export struct RecordsPage {
     return '—';
   }
 
+  /** 记录次行左侧：Key 名称 · 时间。 */
+  private recordMeta(r: RecordRow): string {
+    const key = this.keyLabel(r.keyName, r.keyId);
+    const t = this.timeText(r);
+    return key === '—' ? t : `${key} · ${t}`;
+  }
+
+  /** 记录次行右侧：输入 / 输出 Token（带本地化标签，避免只用箭头产生歧义）。 */
+  private tokensText(r: RecordRow): string {
+    const inLabel = this.res($r('app.string.input').id);
+    const outLabel = this.res($r('app.string.output').id);
+    return `${inLabel} ${formatTokensUi(r.inputTokens)} · ${outLabel} ${formatTokensUi(r.outputTokens)}`;
+  }
+
+  /** 取字符串资源文本（无占位符场景）。 */
+  private res(id: number): string {
+    try {
+      const ctx = this.getUIContext().getHostContext();
+      if (ctx === undefined) {
+        return '';
+      }
+      return ctx.resourceManager.getStringSync(id);
+    } catch (e) {
+      console.error('res failed: ' + (e instanceof Error ? e.message : String(e)));
+      return '';
+    }
+  }
+
+  private toast(msg: string): void {
+    try {
+      this.getUIContext().getPromptAction().showToast({ message: msg });
+    } catch (e) {
+      console.error('toast failed: ' + (e instanceof Error ? e.message : String(e)));
+    }
+  }
+
   /**
    * 记录时间文本：能解析显示为 'MM-DD HH:mm'；解析失败显示原始 createdAt（截断），
    * 便于识别服务器返回的异常时间格式（此时「今天/近7天」过滤也会查不到该行）。
@@ -240,17 +276,6 @@ export struct RecordsPage {
       .width('100%')
 
       Column() {
-        Row() {
-          Text($r('app.string.col_key')).fontSize(11).layoutWeight(1.4).fontColor($r('app.color.text_muted')).maxLines(1).textOverflow({ overflow: TextOverflow.Ellipsis })
-          Text($r('app.string.col_time')).fontSize(11).layoutWeight(1.8).fontColor($r('app.color.text_muted')).maxLines(1).textOverflow({ overflow: TextOverflow.Ellipsis })
-          Text($r('app.string.col_model')).fontSize(11).layoutWeight(2.6).fontColor($r('app.color.text_muted')).maxLines(1).textOverflow({ overflow: TextOverflow.Ellipsis })
-          Text($r('app.string.col_input')).fontSize(11).layoutWeight(1).fontColor($r('app.color.text_muted')).textAlign(TextAlign.End)
-          Text($r('app.string.col_output')).fontSize(11).layoutWeight(1).fontColor($r('app.color.text_muted')).textAlign(TextAlign.End)
-          Text($r('app.string.col_fee')).fontSize(11).layoutWeight(1).fontColor($r('app.color.text_muted')).textAlign(TextAlign.End)
-        }
-        .width('100%')
-        .padding({ top: 6, bottom: 6 })
-
         if (this.vm.records.length === 0) {
           Text($r('app.string.list_empty_hint'))
             .fontSize(12)
@@ -260,32 +285,43 @@ export struct RecordsPage {
             .padding({ top: 14, bottom: 14 })
         } else {
           ForEach(this.vm.records, (r: RecordRow) => {
-            Row() {
-              Text(this.keyLabel(r.keyName, r.keyId)).fontSize(11).layoutWeight(1.4).fontColor($r('app.color.text_secondary')).maxLines(1)
-                .textOverflow({ overflow: TextOverflow.Ellipsis })
-              Text(this.timeText(r)).fontSize(11).layoutWeight(1.8).fontColor($r('app.color.text_secondary')).maxLines(1)
-                .textOverflow({ overflow: TextOverflow.Ellipsis })
-                .onClick(() => {
-                  try {
-                    this.getUIContext().getPromptAction().showToast({ message: r.createdAt === '' ? '--' : r.createdAt });
-                  } catch (e) {
-                    console.error('toast failed: ' + (e instanceof Error ? e.message : String(e)));
-                  }
-                })
-              Text(r.model).fontSize(11).layoutWeight(2.6).fontColor($r('app.color.text_primary')).maxLines(2).textOverflow({ overflow: TextOverflow.Ellipsis })
-                .onClick(() => {
-                  try {
-                    this.getUIContext().getPromptAction().showToast({ message: r.model });
-                  } catch (e) {
-                    console.error('toast failed: ' + (e instanceof Error ? e.message : String(e)));
-                  }
-                })
-              Text(formatTokensUi(r.inputTokens)).fontSize(11).layoutWeight(1).textAlign(TextAlign.End).fontColor($r('app.color.text_secondary'))
-              Text(formatTokensUi(r.outputTokens)).fontSize(11).layoutWeight(1).textAlign(TextAlign.End).fontColor($r('app.color.text_secondary'))
-              Text(formatCost(r.costUsd, this.currency, this.usdCny)).fontSize(11).layoutWeight(1).textAlign(TextAlign.End).fontColor($r('app.color.text_secondary'))
+            // 两行式排布（移动端窄屏更易读）：
+            // 首行 = 主信息（模型名占满 + 费用强调）；次行 = 次要信息（Key·时间 + 输入/输出）
+            Column({ space: 3 }) {
+              Row() {
+                Text(r.model)
+                  .fontSize(13)
+                  .fontColor($r('app.color.text_primary'))
+                  .layoutWeight(1)
+                  .maxLines(1)
+                  .textOverflow({ overflow: TextOverflow.Ellipsis })
+                  .onClick(() => { this.toast(r.model); })
+                Text(formatCost(r.costUsd, this.currency, this.usdCny))
+                  .fontSize(13)
+                  .fontWeight(FontWeight.Medium)
+                  .fontColor($r('app.color.accent'))
+                  .margin({ left: 8 })
+              }
+              .width('100%')
+
+              Row() {
+                Text(this.recordMeta(r))
+                  .fontSize(11)
+                  .fontColor($r('app.color.text_muted'))
+                  .layoutWeight(1)
+                  .maxLines(1)
+                  .textOverflow({ overflow: TextOverflow.Ellipsis })
+                  .onClick(() => { this.toast(r.createdAt === '' ? '--' : r.createdAt); })
+                Text(this.tokensText(r))
+                  .fontSize(11)
+                  .fontColor($r('app.color.text_secondary'))
+                  .margin({ left: 8 })
+              }
+              .width('100%')
             }
             .width('100%')
-            .padding({ top: 4, bottom: 4 })
+            .padding({ top: 7, bottom: 7 })
+            .border({ width: { bottom: 1 }, color: $r('app.color.divider') })
           }, (r: RecordRow) => `${r.usgId}-${this.dataVersion}`)
         }
       }
