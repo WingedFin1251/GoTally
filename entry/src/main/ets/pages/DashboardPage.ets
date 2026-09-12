@@ -1,6 +1,7 @@
 // entry/src/main/ets/pages/DashboardPage.ets
 import { DashboardViewModel } from './DashboardViewModel';
 import { StatCard } from '../components/ui/StatCard';
+import { RangeSegmented } from '../components/ui/RangeSegmented';
 import { QuotaProgress } from '../components/ui/QuotaProgress';
 import { BarChart } from '../components/charts/BarChart';
 import { formatTokensUi, formatCost, formatPercent } from '../common/utils/Formatter';
@@ -71,28 +72,13 @@ export struct DashboardPage {
     AppStorage.setOrCreate('usdCny', await OpenCodeApi.fetchUsdCny());
   }
 
-  @Builder
-  RangePills() {
-    Row({ space: 6 }) {
-      this.Pill(Constants.PERIOD_TODAY, $r('app.string.today'))
-      this.Pill('7d', $r('app.string.days_7'))
-      this.Pill('30d', $r('app.string.days_30'))
-      this.Pill(Constants.PERIOD_ALL, $r('app.string.all'))
+  /** 切换周期：更新 VM 周期并重新加载。 */
+  private onPickPeriod(period: string): void {
+    if (this.vm.period === period) {
+      return;
     }
-  }
-
-  @Builder
-  Pill(period: string, label: Resource) {
-    Text(label)
-      .fontSize(12)
-      .padding({ left: 12, right: 12, top: 5, bottom: 5 })
-      .borderRadius(14)
-      .backgroundColor(this.vm.period === period ? $r('app.color.accent') : $r('app.color.divider'))
-      .fontColor(this.vm.period === period ? Color.White : $r('app.color.text_secondary'))
-      .onClick(() => {
-        this.vm.setPeriod(period);
-        this.refresh();
-      })
+    this.vm.setPeriod(period);
+    this.refresh();
   }
 
   @Builder
@@ -213,11 +199,12 @@ export struct DashboardPage {
       HdsNavDestination() {
         Scroll(this.scroller) {
           Column({ space: 12 }) {
-            // 周期筛选置于内容顶部：滚动时与内容一同滚入标题栏，直观体现沉浸渐变模糊
-            Row() {
-              this.RangePills()
-            }
-            .width('100%')
+            // 周期筛选（官方胶囊分段控件，滑块式指示）置于内容顶部
+            RangeSegmented({
+              current: this.vm.period,
+              onPick: (p: string) => { this.onPickPeriod(p); },
+            })
+              .width('100%')
 
             this.QuotaRow()
             this.OverviewGrid()

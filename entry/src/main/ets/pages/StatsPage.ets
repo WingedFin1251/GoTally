@@ -1,6 +1,7 @@
 // entry/src/main/ets/pages/StatsPage.ets
 import { StatsViewModel } from './StatsViewModel';
 import { StatCard } from '../components/ui/StatCard';
+import { RangeSegmented } from '../components/ui/RangeSegmented';
 import { DonutChart, DonutItem } from '../components/charts/DonutChart';
 import { LineChart, LineSeries } from '../components/charts/LineChart';
 import { formatTokensUi, formatCost } from '../common/utils/Formatter';
@@ -160,40 +161,21 @@ export struct StatsPage {
     });
   }
 
-  @Builder
-  RangePills() {
-    Row({ space: 6 }) {
-      this.Pill(Constants.PERIOD_TODAY, $r('app.string.today'))
-      this.Pill('7d', $r('app.string.days_7'))
-      this.Pill('30d', $r('app.string.days_30'))
-      this.Pill(Constants.PERIOD_ALL, $r('app.string.all'))
+  /** 切换周期：先整体替换快照更新选中态，再异步加载并整体替换数据快照。 */
+  private onPickPeriod(period: string): void {
+    if (this.chart.period === period) {
+      return;
     }
-  }
-
-  @Builder
-  Pill(period: string, label: Resource) {
-    Text(label)
-      .fontSize(12)
-      .padding({ left: 12, right: 12, top: 5, bottom: 5 })
-      .borderRadius(14)
-      .backgroundColor(this.chart.period === period ? $r('app.color.accent') : $r('app.color.divider'))
-      .fontColor(this.chart.period === period ? Color.White : $r('app.color.text_secondary'))
-      .onClick(() => {
-        if (this.chart.period === period) {
-          return;
-        }
-        // 先整体替换快照更新高亮（不触发数据加载），随后异步加载并整体替换数据快照
-        this.chart = {
-          period: period,
-          dim: this.chart.dim,
-          totals: this.chart.totals,
-          models: this.chart.models,
-          daily30: this.chart.daily30,
-          todayTrend: this.chart.todayTrend,
-          version: this.chart.version,
-        };
-        this.refresh();
-      })
+    this.chart = {
+      period: period,
+      dim: this.chart.dim,
+      totals: this.chart.totals,
+      models: this.chart.models,
+      daily30: this.chart.daily30,
+      todayTrend: this.chart.todayTrend,
+      version: this.chart.version,
+    };
+    this.refresh();
   }
 
   @Builder
@@ -414,11 +396,12 @@ export struct StatsPage {
       HdsNavDestination() {
         Scroll(this.scroller) {
           Column({ space: 12 }) {
-            // 周期筛选置于内容顶部：滚动时与内容一同滚入标题栏，直观体现沉浸渐变模糊
-            Row() {
-              this.RangePills()
-            }
-            .width('100%')
+            // 周期筛选（官方胶囊分段控件，滑块式指示）置于内容顶部
+            RangeSegmented({
+              current: this.chart.period,
+              onPick: (p: string) => { this.onPickPeriod(p); },
+            })
+              .width('100%')
 
             this.KpiCards()
             this.TokenDetail()
