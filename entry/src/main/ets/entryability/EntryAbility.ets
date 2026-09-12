@@ -16,7 +16,18 @@ export default class EntryAbility extends UIAbility {
       hilog.error(DOMAIN, 'testTag', 'Failed to set colorMode. Cause: %{public}s', JSON.stringify(err));
     }
     this.applySavedLanguage();
+    this.applySavedGlowLevel();
     hilog.info(DOMAIN, 'testTag', '%{public}s', 'Ability onCreate');
+  }
+
+  /** 启动时应用用户保存的沉浸光感档位（供 HdsTabs 悬浮导航栏选择系统材质等级）。 */
+  private async applySavedGlowLevel(): Promise<void> {
+    try {
+      const level = await SettingsStore.getGlowLevel();
+      AppStorage.setOrCreate('glowLevel', level);
+    } catch (e) {
+      hilog.warn(DOMAIN, 'testTag', 'Failed to apply saved glow level. Cause: %{public}s', String(e));
+    }
   }
 
   /** 启动时应用用户保存的语言偏好（配合设置页 ApplicationContext.setLanguage 运行时切换）。 */

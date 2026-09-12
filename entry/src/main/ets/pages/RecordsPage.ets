@@ -16,6 +16,20 @@ export struct RecordsPage {
   @StorageProp('statusBarHeight') statusBarHeight: number = 0;
   @StorageProp('navIndicatorHeight') navIndicatorHeight: number = 0;
   private reloadRetried: boolean = false;
+  /** 滚动联动：向下滚隐藏悬浮导航栏、向上滚显示（由 Index 播放 HDS 滚动动画）。 */
+  onNavChanged?: (hide: boolean) => void;
+  private scrollHidden: boolean = false;
+
+  /** 滚动联动：向下滚隐藏悬浮导航栏，向上滚显示。 */
+  private handleNavScroll(offset: number): void {
+    if (offset > 0 && !this.scrollHidden) {
+      this.scrollHidden = true;
+      if (this.onNavChanged !== undefined) { this.onNavChanged(true); }
+    } else if (offset < 0 && this.scrollHidden) {
+      this.scrollHidden = false;
+      if (this.onNavChanged !== undefined) { this.onNavChanged(false); }
+    }
+  }
 
   aboutToAppear(): void {
     this.reload();
@@ -277,6 +291,10 @@ export struct RecordsPage {
       .backgroundColor($r('app.color.bg_page'))
       .expandSafeArea([SafeAreaType.SYSTEM], [SafeAreaEdge.BOTTOM])
       .scrollBar(BarState.Off)
+      .onScrollFrameBegin((offset: number) => {
+        this.handleNavScroll(offset);
+        return { offsetRemain: offset };
+      })
 
       // 固定标题栏：顶部让出状态栏（不与通知栏重叠），背景模糊
       Column() {

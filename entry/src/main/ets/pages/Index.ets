@@ -1,6 +1,6 @@
 // entry/src/main/ets/pages/Index.ets
 import { window } from '@kit.ArkUI';
-import { HdsTabs, HdsTabsController, HdsTabsFloatingStyle, hdsMaterial } from '@kit.UIDesignKit';
+import { HdsAnimationMode, HdsTabs, HdsTabsController, HdsTabsFloatingStyle, hdsMaterial } from '@kit.UIDesignKit';
 import { DataProvider } from '../data/DataProvider';
 import { SettingsStore } from '../data/SettingsStore';
 import { setLanguage } from '../common/utils/Locale';
@@ -16,6 +16,8 @@ struct Index {
   @State currentTab: number = 0;
   @State loggedIn: boolean = false;
   @State navIndicatorHeight: number = 0;
+  /** 沉浸光感档位（设置页可调）：0 弱 / 1 均衡 / 2 强，映射 HDS 系统材质等级。 */
+  @StorageProp('glowLevel') glowLevel: number = 1;
   @Watch('applyAutoSync') @StorageLink('autoSyncChanged') autoSyncVersion: number = 0;
   @Watch('onLogout') @StorageLink('logoutVersion') logoutVersion: number = 0;
   private tabsController: HdsTabsController = new HdsTabsController();
@@ -84,16 +86,31 @@ struct Index {
     this.applyAutoSync();
   }
 
-  /** HdsTabs 悬浮样式：液态玻璃沉浸材质（参考 HDS 规范）；HdsTabs 自身已处理系统安全区，无需额外叠加。 */
+  /** HdsTabs 悬浮样式：与参考实现一致——动态底部避让 + 跟随左右手 + IMMERSIVE 三档材质。 */
   private buildFloatingStyle(): HdsTabsFloatingStyle {
+    let level: hdsMaterial.MaterialLevel = hdsMaterial.MaterialLevel.ADAPTIVE;
+    if (this.glowLevel === 0) {
+      level = hdsMaterial.MaterialLevel.GENTLE;
+    } else if (this.glowLevel === 2) {
+      level = hdsMaterial.MaterialLevel.EXQUISITE;
+    }
     return {
-      barSideMargin: 16,
-      barBottomMargin: 16,
+      barBottomMargin: this.navIndicatorHeight === 0 ? 12 : this.navIndicatorHeight + 1,
+      adaptToHandedness: true,
       systemMaterialEffect: {
         materialType: hdsMaterial.MaterialType.IMMERSIVE,
-        materialLevel: hdsMaterial.MaterialLevel.ADAPTIVE
+        materialLevel: level
       }
     };
+  }
+
+  /** 页面滚动联动：向下滚隐藏悬浮导航栏，向上滚显示（HDS 滚动场景动画）。 */
+  private playNavAnimation(hide: boolean): void {
+    if (hide) {
+      this.tabsController.applyHideAnimation(HdsAnimationMode.SCROLL_ANIMATION);
+    } else {
+      this.tabsController.applyShowAnimation(HdsAnimationMode.SCROLL_ANIMATION);
+    }
   }
 
   @Builder
@@ -127,20 +144,21 @@ struct Index {
     .justifyContent(FlexAlign.Center)
   }
 
-  /** HDS Tab 项：SymbolGlyph 图标 + 文字，选中 accent 色。 */
+  /** HDS Tab 项：SymbolGlyph 图标 + 文字；规格对齐参考实现（22 图标 / 10.5 文字 / 选中加粗 accent / 200ms 缓动）。 */
   @Builder
   tabBarContent(index: number, icon: Resource, label: ResourceStr) {
-    Column() {
+    Column({ space: 3 }) {
       SymbolGlyph(icon)
-        .fontSize(24)
+        .fontSize(22)
         .fontColor([this.currentTab === index ? $r('app.color.accent') : $r('app.color.text_muted')])
+        .animation({ duration: 200, curve: Curve.FastOutSlowIn })
       Text(label)
-        .fontSize(11)
-        .fontWeight(this.currentTab === index ? FontWeight.Bold : FontWeight.Medium)
+        .fontSize(10.5)
+        .fontWeight(this.currentTab === index ? FontWeight.Bold : FontWeight.Normal)
         .fontColor(this.currentTab === index ? $r('app.color.accent') : $r('app.color.text_muted'))
         .maxLines(1)
         .textOverflow({ overflow: TextOverflow.Ellipsis })
-        .margin({ top: 2 })
+        .animation({ duration: 200, curve: Curve.FastOutSlowIn })
     }
     .justifyContent(FlexAlign.Center)
     .alignItems(HorizontalAlign.Center)
@@ -161,34 +179,32 @@ struct Index {
         controller: this.tabsController
       }) {
         TabContent() {
-          DashboardPage()
+          DashboardPage({ onNavChanged: (hide: boolean) => { this.playNavAnimation(hide); } })
         }
         .tabBar(this.tabBarContent(0, $r('sys.symbol.house'), $r('app.string.tab_home')))
 
         TabContent() {
-          StatsPage()
+          StatsPage({ onNavChanged: (hide: boolean) => { this.playNavAnimation(hide); } })
         }
         .tabBar(this.tabBarContent(1, $r('sys.symbol.square_grid_2x2'), $r('app.string.tab_stats')))
 
         TabContent() {
-          RecordsPage()
+          RecordsPage({ onNavChanged: (hide: boolean) => { this.playNavAnimation(hide); } })
         }
         .tabBar(this.tabBarContent(2, $r('sys.symbol.list_bullet'), $r('app.string.tab_records')))
 
         TabContent() {
-          SettingsPage()
+          SettingsPage({ onNavChanged: (hide: boolean) => { this.playNavAnimation(hide); } })
         }
         .tabBar(this.tabBarContent(3, $r('sys.symbol.gearshape'), $r('app.string.tab_settings')))
 
         TabContent() {
-          AboutPage()
+          AboutPage({ onNavChanged: (hide: boolean) => { this.playNavAnimation(hide); } })
         }
         .tabBar(this.tabBarContent(4, $r('sys.symbol.info_circle'), $r('app.string.tab_about')))
       }
-      .barHeight(62)
+      .barHeight(56)
       .barOverlap(true)
-      .barBackgroundColor(Color.Transparent)
-      .barBackgroundBlurStyle(BlurStyle.COMPONENT_THIN)
       .barFloatingStyle(this.buildFloatingStyle())
       .backgroundColor($r('app.color.bg_page'))
       .scrollable(false)

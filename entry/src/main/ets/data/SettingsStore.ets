@@ -11,6 +11,7 @@ export class SettingsKeys {
   static readonly THEME: string = 'theme';
   static readonly CURRENCY: string = 'currency';
   static readonly LANGUAGE: string = 'language';
+  static readonly GLOW_LEVEL: string = 'glow_level';
 }
 
 export interface AppSettings {
@@ -20,6 +21,8 @@ export interface AppSettings {
   theme: string;
   currency: string;
   language: string;
+  /** 沉浸光感档位：0 弱(GENTLE) / 1 均衡(ADAPTIVE) / 2 强(EXQUISITE)。 */
+  glowLevel: number;
 }
 
 const DEFAULT_SETTINGS: AppSettings = {
@@ -29,6 +32,7 @@ const DEFAULT_SETTINGS: AppSettings = {
   theme: 'light',
   currency: 'CNY',
   language: 'zh',
+  glowLevel: 1,
 };
 
 /** Preferences 设置存储（同步间隔/范围/开关/主题/货币/语言）。 */
@@ -58,6 +62,7 @@ export class SettingsStore {
       const theme = await pref.get(SettingsKeys.THEME, DEFAULT_SETTINGS.theme) as string;
       const currency = await pref.get(SettingsKeys.CURRENCY, DEFAULT_SETTINGS.currency) as string;
       const language = await pref.get(SettingsKeys.LANGUAGE, DEFAULT_SETTINGS.language) as string;
+      const glowLevel = await pref.get(SettingsKeys.GLOW_LEVEL, DEFAULT_SETTINGS.glowLevel) as number;
       return {
         syncIntervalSec: interval,
         windowDays: windowRaw > 0 ? windowRaw : null,
@@ -65,6 +70,7 @@ export class SettingsStore {
         theme: theme,
         currency: currency,
         language: language,
+        glowLevel: glowLevel,
       };
     } catch (e) {
       throw e instanceof Error ? e : new Error(String(e));
@@ -91,6 +97,10 @@ export class SettingsStore {
     return (await SettingsStore.getAll()).language;
   }
 
+  static async getGlowLevel(): Promise<number> {
+    return (await SettingsStore.getAll()).glowLevel;
+  }
+
   static async put(key: string, value: preferences.ValueType): Promise<void> {
     try {
       const pref = await SettingsStore.getPref();
@@ -110,6 +120,7 @@ export class SettingsStore {
       await pref.put(SettingsKeys.THEME, payload.theme);
       await pref.put(SettingsKeys.CURRENCY, payload.currency);
       await pref.put(SettingsKeys.LANGUAGE, payload.language);
+      await pref.put(SettingsKeys.GLOW_LEVEL, payload.glowLevel);
       await pref.flush();
     } catch (e) {
       throw e instanceof Error ? e : new Error(String(e));

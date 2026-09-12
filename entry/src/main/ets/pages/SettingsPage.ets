@@ -20,7 +20,7 @@ interface PillOption {
 @Component
 export struct SettingsPage {
   @State settings: AppSettings = {
-    syncIntervalSec: 300, windowDays: 60, autoSync: true, theme: 'light', currency: 'CNY', language: 'zh',
+    syncIntervalSec: 300, windowDays: 60, autoSync: true, theme: 'light', currency: 'CNY', language: 'zh', glowLevel: 1,
   };
   @State loggedIn: boolean = false;
   @State workspace: string = '';
@@ -29,6 +29,20 @@ export struct SettingsPage {
   @State syncProgressMsg: string = '';
   /** 上一次 onProgress 上报的阶段，用于捕捉 done/error 完成时刻（仅触发一次 toast/刷新）。 */
   private lastPhase: string = 'idle';
+  /** 滚动联动：向下滚隐藏悬浮导航栏、向上滚显示（由 Index 播放 HDS 滚动动画）。 */
+  onNavChanged?: (hide: boolean) => void;
+  private scrollHidden: boolean = false;
+
+  /** 滚动联动：向下滚隐藏悬浮导航栏，向上滚显示。 */
+  private handleNavScroll(offset: number): void {
+    if (offset > 0 && !this.scrollHidden) {
+      this.scrollHidden = true;
+      if (this.onNavChanged !== undefined) { this.onNavChanged(true); }
+    } else if (offset < 0 && this.scrollHidden) {
+      this.scrollHidden = false;
+      if (this.onNavChanged !== undefined) { this.onNavChanged(false); }
+    }
+  }
   @StorageProp('statusBarHeight') statusBarHeight: number = 0;
   @StorageProp('navIndicatorHeight') navIndicatorHeight: number = 0;
 
@@ -97,6 +111,7 @@ export struct SettingsPage {
     if (key === 'windowDays') { return this.settings.windowDays === null ? 'all' : `${this.settings.windowDays}`; }
     if (key === 'theme') { return this.settings.theme; }
     if (key === 'currency') { return this.settings.currency; }
+    if (key === 'glowLevel') { return `${this.settings.glowLevel}`; }
     return this.settings.language;
   }
 
@@ -220,6 +235,23 @@ export struct SettingsPage {
                 this.showToastSafe(v === 'zh' ? '已切换为中文' : 'Switched to English');
               })
           }
+
+          // 沉浸光感：三档映射 HDS 系统材质等级（GENTLE/ADAPTIVE/EXQUISITE），即时作用于底部悬浮导航栏
+          SettingRow({ title: $r('app.string.glow'), desc: $r('app.string.glow_desc') }) {
+            this.PillRow(
+              'glowLevel',
+              [
+                { value: '0', label: $r('app.string.glow_weak') },
+                { value: '1', label: $r('app.string.glow_medium') },
+                { value: '2', label: $r('app.string.glow_strong') },
+              ],
+              (v: string) => {
+                const lv = Number(v);
+                this.settings.glowLevel = lv;
+                SettingsStore.save(this.settings);
+                AppStorage.setOrCreate('glowLevel', lv);
+              })
+          }
         }
 
         // 数据
@@ -249,6 +281,10 @@ export struct SettingsPage {
     .backgroundColor($r('app.color.bg_page'))
     .expandSafeArea([SafeAreaType.SYSTEM], [SafeAreaEdge.BOTTOM])
     .scrollBar(BarState.Off)
+    .onScrollFrameBegin((offset: number) => {
+      this.handleNavScroll(offset);
+      return { offsetRemain: offset };
+    })
 
     // 固定标题栏：顶部让出状态栏（不与通知栏重叠），背景模糊
     Column() {

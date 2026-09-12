@@ -116,6 +116,11 @@
     { "name": "currency_desc", "value": "费用主显示货币（实时汇率）" },
     { "name": "language", "value": "语言 / Language" },
     { "name": "language_desc", "value": "界面显示语言" },
+    { "name": "glow", "value": "沉浸光感" },
+    { "name": "glow_desc", "value": "底部悬浮导航栏材质的通透程度" },
+    { "name": "glow_weak", "value": "弱" },
+    { "name": "glow_medium", "value": "均衡" },
+    { "name": "glow_strong", "value": "强" },
 
     { "name": "set_data", "value": "数据" },
     { "name": "data_dir", "value": "数据目录" },
