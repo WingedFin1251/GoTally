@@ -18,13 +18,17 @@ import { LengthMetrics } from '@kit.ArkUI';
  *   .mode(NavigationMode.Stack).hideTitleBar(true).hideToolBar(true)
  *
  * 注意：内容区顶部需自行预留标题栏高度（56vp）+ 状态栏高度，否则首屏内容会被栏体压住。
+ *
+ * @param title 标题文案
+ * @param glowLevel 沉浸光感档位（0 弱 / 1 均衡 / 2 强）。必须由页面的 @StorageProp('glowLevel')
+ *        显式传入——这样档位变化会触发页面重建，标题栏材质即时更新；若在函数内直接读 AppStorage，
+ *        页面不会因该值变化而重建，会出现「要重启应用才生效」的问题。
  */
-export function buildTitleBar(title: ResourceStr): HdsNavigationTitleBarOptions {
-  const glow: number = AppStorage.get<number>('glowLevel') ?? 1;
+export function buildTitleBar(title: ResourceStr, glowLevel: number): HdsNavigationTitleBarOptions {
   let level: hdsMaterial.MaterialLevel = hdsMaterial.MaterialLevel.ADAPTIVE;
-  if (glow === 0) {
+  if (glowLevel === 0) {
     level = hdsMaterial.MaterialLevel.GENTLE;
-  } else if (glow === 2) {
+  } else if (glowLevel === 2) {
     level = hdsMaterial.MaterialLevel.EXQUISITE;
   }
   // 标题/图标颜色用资源色，随深浅色主题自动适配

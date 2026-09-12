@@ -41,6 +41,8 @@ export struct StatsPage {
   @StorageProp('usdCny') usdCny: number = Constants.DEFAULT_USD_CNY;
   @StorageProp('statusBarHeight') statusBarHeight: number = 0;
   @StorageProp('navIndicatorHeight') navIndicatorHeight: number = 0;
+  /** 沉浸光感档位：响应式依赖，改设置后标题栏材质即时更新（不只是底部导航栏）。 */
+  @StorageProp('glowLevel') glowLevel: number = 1;
   @Watch('onSyncFinished') @StorageProp('syncFinishedVersion') syncFinishedVersion: number = 0;
   private refreshRetried: boolean = false;
   /** 滚动联动：向下滚隐藏悬浮导航栏、向上滚显示（由 Index 播放 HDS 滚动动画）。 */
@@ -437,7 +439,7 @@ export struct StatsPage {
           return { offsetRemain: offset };
         })
       }
-      .titleBar(buildTitleBar($r('app.string.stats_title')))
+      .titleBar(buildTitleBar($r('app.string.stats_title'), this.glowLevel))
       .bindToScrollable([this.scroller])
     }
     .mode(NavigationMode.Stack)
