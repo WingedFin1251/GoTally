@@ -45,7 +45,7 @@ export struct AboutPage {
               .fontSize(22)
               .fontWeight(FontWeight.Bold)
               .fontColor($r('app.color.text_primary'))
-            Text('v1.1.0')
+            Text('v1.2.0')
               .fontSize(12)
               .fontColor($r('app.color.text_muted'))
           }
