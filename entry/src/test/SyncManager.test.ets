@@ -4,6 +4,7 @@ import { SyncManager } from '../main/ets/network/SyncManager';
 import type { UsageFetcher } from '../main/ets/network/UsageFetcher';
 import type { UsageStore } from '../main/ets/data/UsageStore';
 import type { UsageRecord, SyncState } from '../main/ets/model/UsageRecord';
+import type { KeyNamePair } from '../main/ets/model/Stats';
 
 const mkRec = (i: number): UsageRecord => ({
   usgId: `usg_${i}`, createdAt: `2026-08-1${i % 10}T00:00:00Z`, model: 'gpt-4o',
@@ -42,6 +43,14 @@ class FakeStore implements UsageStore {
   }
   async getSyncState(): Promise<SyncState> { return this.syncState; }
   async clearAccount(): Promise<void> { this.records = []; }
+  /** Key 名称缓存：测试用内存实现。 */
+  keyNames: Map<string, string> = new Map<string, string>();
+  async getKeyNames(): Promise<Map<string, string>> { return this.keyNames; }
+  async saveKeyNames(pairs: KeyNamePair[]): Promise<void> {
+    for (const p of pairs) {
+      this.keyNames.set(p.keyId, p.name);
+    }
+  }
 }
 
 /** ArkTS 不允许用对象字面量初始化带方法的接口，改用类实现。 */

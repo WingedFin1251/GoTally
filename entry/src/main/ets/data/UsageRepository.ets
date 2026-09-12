@@ -5,7 +5,7 @@ import { SettingsStore } from './SettingsStore';
 import { toCanonicalIso } from '../common/utils/TimeUtil';
 import type { UsageStore, UsageDataStore } from './UsageStore';
 import type { UsageRecord, SyncState } from '../model/UsageRecord';
-import type { Totals, ModelStat, DailyStat, TrendPoint, SessionStat, RecordRow } from '../model/Stats';
+import type { Totals, ModelStat, DailyStat, TrendPoint, SessionStat, RecordRow, KeyNamePair } from '../model/Stats';
 import { Constants } from '../common/constants/Constants';
 
 interface PeriodFilter {
@@ -322,6 +322,48 @@ export class UsageRepository implements UsageDataStore {
     }
   }
 
+  // ---- Key 名称缓存（对齐上游：拉取工作区 keys 页面得到的 key_id → 名称）----
+  async getKeyNames(): Promise<Map<string, string>> {
+    const names = new Map<string, string>();
+    try {
+      const store = await RdbHelper.getStore();
+      const rs = await store.querySql('SELECT key_id, name FROM key_names');
+      while (rs.goToNextRow()) {
+        const id = rs.getString(rs.getColumnIndex('key_id'));
+        if (id !== '') {
+          names.set(id, rs.getString(rs.getColumnIndex('name')));
+        }
+      }
+      rs.close();
+    } catch (e) {
+      // 缓存读失败不影响主流程，返回已收集到的部分
+      console.error('getKeyNames failed: ' + (e instanceof Error ? e.message : String(e)));
+    }
+    return names;
+  }
+
+  /** 合并写入：逐条 upsert，不清空既有条目（单次拉取失败不会丢掉已缓存的名称）。 */
+  async saveKeyNames(pairs: KeyNamePair[]): Promise<void> {
+    if (pairs.length === 0) {
+      return;
+    }
+    try {
+      const store = await RdbHelper.getStore();
+      const now = RdbHelper.nowIso();
+      for (const p of pairs) {
+        if (p.keyId === '' || p.name === '') {
+          continue;
+        }
+        await store.executeSql(
+          'INSERT OR REPLACE INTO key_names (key_id, name, updated_at) VALUES (?, ?, ?)',
+          [p.keyId, p.name, now]);
+      }
+    } catch (e) {
+      fail('saveKeyNames', e);
+      throw asError(e);
+    }
+  }
+
   // ---- 聚合 ----
   async totals(period: string): Promise<Totals> {
     try {
@@ -499,17 +541,23 @@ export class UsageRepository implements UsageDataStore {
       const f = UsageRepository.periodWhere(period);
       const where = UsageRepository.whereOf(f);
       const store = await RdbHelper.getStore();
+      // 对齐上游 v1.0.2：无 session_id 的记录不再合并成一行「未归属」，而是按 key_id 拆分；
+      // 两者都为空时才兜底聚合为 session_id='' 的「未归属」行。
+      const groupKey = `CASE WHEN session_id IS NOT NULL AND session_id != '' THEN session_id
+                             WHEN key_id IS NOT NULL AND key_id != '' THEN key_id
+                             ELSE '' END`;
       const totalRs = await store.querySql(
-        `SELECT COUNT(DISTINCT CASE WHEN session_id IS NULL OR session_id = '' THEN '' ELSE session_id END) AS c
-         FROM usage_records ${where}`, f.params);
+        `SELECT COUNT(DISTINCT ${groupKey}) AS c FROM usage_records ${where}`, f.params);
       let total = 0;
       if (totalRs.goToFirstRow()) {
         total = totalRs.getLong(totalRs.getColumnIndex('c'));
       }
       totalRs.close();
+      const keyNames = await this.getKeyNames();
       const offset = (page - 1) * pageSize;
       const rs = await store.querySql(
-        `SELECT CASE WHEN session_id IS NULL OR session_id = '' THEN '' ELSE session_id END AS session_id,
+        `SELECT ${groupKey} AS session_id,
+                MAX(key_id) AS key_id,
                 COUNT(*) AS request_count,
                 SUM(input_tokens + cache_read_tokens + cache_write_5m_tokens + cache_write_1h_tokens) AS total_input_tokens,
                 SUM(input_tokens) AS uncached_input_tokens,
@@ -518,15 +566,18 @@ export class UsageRepository implements UsageDataStore {
                 SUM(cost_usd) AS total_cost_usd,
                 MAX(created_at) AS last_at
          FROM usage_records ${where}
-         GROUP BY session_id
+         GROUP BY ${groupKey}
          ORDER BY last_at DESC
          LIMIT ? OFFSET ?`, [...f.params, pageSize, offset]);
       const out: SessionStat[] = [];
       while (rs.goToNextRow()) {
         const l = (n: string): number => rs.getLong(rs.getColumnIndex(n));
         const d = (n: string): number => rs.getDouble(rs.getColumnIndex(n));
+        const keyId = rs.getString(rs.getColumnIndex('key_id'));
         out.push({
           sessionId: rs.getString(rs.getColumnIndex('session_id')),
+          keyId: keyId,
+          keyName: keyNames.get(keyId) ?? '',
           requestCount: l('request_count'),
           totalInputTokens: l('total_input_tokens'),
           uncachedInputTokens: l('uncached_input_tokens'),
@@ -569,6 +620,7 @@ export class UsageRepository implements UsageDataStore {
         `SELECT * FROM usage_records ${where} ORDER BY created_at DESC LIMIT ? OFFSET ?`,
         [...params, pageSize, offset]);
       const out: RecordRow[] = [];
+      const keyNames = await this.getKeyNames();
       while (rs.goToNextRow()) {
         const rec = rowAsUsageRecord(rs);
         out.push({
@@ -583,6 +635,8 @@ export class UsageRepository implements UsageDataStore {
           cacheWriteTokens: rec.cacheWrite5mTokens + rec.cacheWrite1hTokens,
           costUsd: rec.costUsd,
           sessionId: rec.sessionId,
+          keyId: rec.keyId,
+          keyName: keyNames.get(rec.keyId) ?? '',
           plan: rec.plan,
         });
       }

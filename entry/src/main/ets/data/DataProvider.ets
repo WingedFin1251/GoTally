@@ -6,6 +6,7 @@ import { MockRepository } from './MockRepository';
 import type { UsageFetcher } from '../network/UsageFetcher';
 import { OpenCodeApi } from '../network/OpenCodeApi';
 import type { UsageRecord } from '../model/UsageRecord';
+import type { KeyNamePair } from '../model/Stats';
 import type { UsageAggregator } from '../model/Stats';
 import { SyncManager } from '../network/SyncManager';
 import { SettingsStore } from './SettingsStore';
@@ -49,7 +50,8 @@ export class DataProvider {
         DataProvider.getStore(),
         DataProvider.getFetcher(),
         async (): Promise<number> => SettingsStore.getSyncIntervalSec(),
-        (hint: string, token: string): Promise<string> => OpenCodeApi.resolveWorkspaceId(hint, token));
+        (hint: string, token: string): Promise<string> => OpenCodeApi.resolveWorkspaceId(hint, token),
+        (workspaceId: string, token: string): Promise<KeyNamePair[]> => OpenCodeApi.fetchKeyNames(token, workspaceId));
     }
     return DataProvider.sync;
   }

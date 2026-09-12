@@ -122,7 +122,8 @@ export struct RecordsPage {
 
       Column() {
         Row() {
-          Text($r('app.string.col_session')).fontSize(11).layoutWeight(2).fontColor($r('app.color.text_muted'))
+          Text($r('app.string.col_key')).fontSize(11).layoutWeight(1.4).fontColor($r('app.color.text_muted')).maxLines(1).textOverflow({ overflow: TextOverflow.Ellipsis })
+          Text($r('app.string.col_session')).fontSize(11).layoutWeight(1.8).fontColor($r('app.color.text_muted')).maxLines(1).textOverflow({ overflow: TextOverflow.Ellipsis })
           Text($r('app.string.col_input')).fontSize(11).layoutWeight(1).fontColor($r('app.color.text_muted')).textAlign(TextAlign.End)
           Text($r('app.string.col_output')).fontSize(11).layoutWeight(1).fontColor($r('app.color.text_muted')).textAlign(TextAlign.End)
           Text($r('app.string.col_requests')).fontSize(11).layoutWeight(1).fontColor($r('app.color.text_muted')).textAlign(TextAlign.End)
@@ -141,7 +142,9 @@ export struct RecordsPage {
         } else {
           ForEach(this.vm.sessions, (s: SessionStat) => {
             Row() {
-              Text(this.shortSession(s.sessionId)).fontSize(12).layoutWeight(2).fontColor($r('app.color.text_primary')).maxLines(1)
+              Text(this.keyLabel(s.keyName, s.keyId)).fontSize(11).layoutWeight(1.4).fontColor($r('app.color.text_secondary')).maxLines(1)
+                .textOverflow({ overflow: TextOverflow.Ellipsis })
+              Text(this.shortSession(s.sessionId)).fontSize(12).layoutWeight(1.8).fontColor($r('app.color.text_primary')).maxLines(1)
               Text(formatTokensUi(s.totalInputTokens)).fontSize(12).layoutWeight(1).textAlign(TextAlign.End).fontColor($r('app.color.text_secondary'))
               Text(formatTokensUi(s.totalOutputTokens)).fontSize(12).layoutWeight(1).textAlign(TextAlign.End).fontColor($r('app.color.text_secondary'))
               Text(`${s.requestCount}`).fontSize(12).layoutWeight(1).textAlign(TextAlign.End).fontColor($r('app.color.text_secondary'))
@@ -169,9 +172,18 @@ export struct RecordsPage {
     .backgroundColor($r('app.color.bg_card'))
   }
 
+  /** 会话列显示：无 session 的记录按 Key 拆分行，显示「未归属 · key尾号」。 */
   private shortSession(id: string): string {
     if (id === '') { return '未归属'; }
+    if (id.startsWith('key_')) { return `未归属 · …${id.substring(Math.max(0, id.length - 6))}`; }
     return id.length > 12 ? `…${id.substring(id.length - 12)}` : id;
+  }
+
+  /** Key 列显示：优先显示名称，取不到时退回 key 尾号，完全无归属显示「—」。 */
+  private keyLabel(name: string, keyId: string): string {
+    if (name !== '') { return name; }
+    if (keyId !== '') { return `…${keyId.substring(Math.max(0, keyId.length - 6))}`; }
+    return '—';
   }
 
   /**
@@ -229,8 +241,9 @@ export struct RecordsPage {
 
       Column() {
         Row() {
-          Text($r('app.string.col_time')).fontSize(11).layoutWeight(2).fontColor($r('app.color.text_muted'))
-          Text($r('app.string.col_model')).fontSize(11).layoutWeight(3).fontColor($r('app.color.text_muted'))
+          Text($r('app.string.col_key')).fontSize(11).layoutWeight(1.4).fontColor($r('app.color.text_muted')).maxLines(1).textOverflow({ overflow: TextOverflow.Ellipsis })
+          Text($r('app.string.col_time')).fontSize(11).layoutWeight(1.8).fontColor($r('app.color.text_muted')).maxLines(1).textOverflow({ overflow: TextOverflow.Ellipsis })
+          Text($r('app.string.col_model')).fontSize(11).layoutWeight(2.6).fontColor($r('app.color.text_muted')).maxLines(1).textOverflow({ overflow: TextOverflow.Ellipsis })
           Text($r('app.string.col_input')).fontSize(11).layoutWeight(1).fontColor($r('app.color.text_muted')).textAlign(TextAlign.End)
           Text($r('app.string.col_output')).fontSize(11).layoutWeight(1).fontColor($r('app.color.text_muted')).textAlign(TextAlign.End)
           Text($r('app.string.col_fee')).fontSize(11).layoutWeight(1).fontColor($r('app.color.text_muted')).textAlign(TextAlign.End)
@@ -248,7 +261,9 @@ export struct RecordsPage {
         } else {
           ForEach(this.vm.records, (r: RecordRow) => {
             Row() {
-              Text(this.timeText(r)).fontSize(11).layoutWeight(2).fontColor($r('app.color.text_secondary')).maxLines(1)
+              Text(this.keyLabel(r.keyName, r.keyId)).fontSize(11).layoutWeight(1.4).fontColor($r('app.color.text_secondary')).maxLines(1)
+                .textOverflow({ overflow: TextOverflow.Ellipsis })
+              Text(this.timeText(r)).fontSize(11).layoutWeight(1.8).fontColor($r('app.color.text_secondary')).maxLines(1)
                 .textOverflow({ overflow: TextOverflow.Ellipsis })
                 .onClick(() => {
                   try {
@@ -257,7 +272,7 @@ export struct RecordsPage {
                     console.error('toast failed: ' + (e instanceof Error ? e.message : String(e)));
                   }
                 })
-              Text(r.model).fontSize(11).layoutWeight(3).fontColor($r('app.color.text_primary')).maxLines(2).textOverflow({ overflow: TextOverflow.Ellipsis })
+              Text(r.model).fontSize(11).layoutWeight(2.6).fontColor($r('app.color.text_primary')).maxLines(2).textOverflow({ overflow: TextOverflow.Ellipsis })
                 .onClick(() => {
                   try {
                     this.getUIContext().getPromptAction().showToast({ message: r.model });

@@ -1,6 +1,6 @@
 // entry/src/main/ets/data/UsageStore.ets（最终版本：全部异步）
 import type { UsageRecord, SyncState } from '../model/UsageRecord';
-import type { UsageAggregator } from '../model/Stats';
+import type { UsageAggregator, KeyNamePair } from '../model/Stats';
 
 /** SyncManager 依赖的最小数据访问面（本地单测注入内存实现）。 */
 export interface UsageStore {
@@ -14,6 +14,10 @@ export interface UsageStore {
   getWindowDays(): Promise<number | null>;
   updateSyncState(status: string, error: string, inserted: number): Promise<void>;
   getSyncState(): Promise<SyncState>;
+  /** Key 名称缓存读（key_id → 名称）。 */
+  getKeyNames(): Promise<Map<string, string>>;
+  /** Key 名称缓存合并写入：只增改不清空，单次拉取失败不会丢掉已有名称。 */
+  saveKeyNames(pairs: KeyNamePair[]): Promise<void>;
 }
 
 /** 组合接口：存储 + 聚合（UsageRepository 与 MockRepository 均完整实现）。 */

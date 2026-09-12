@@ -51,6 +51,11 @@ const SCHEMA_STATEMENTS: string[] = [
      created_at TEXT NOT NULL,
      updated_at TEXT NOT NULL
    );`,
+  `CREATE TABLE IF NOT EXISTS key_names (
+     key_id TEXT PRIMARY KEY,
+     name TEXT NOT NULL,
+     updated_at TEXT NOT NULL
+   );`,
 ];
 
 /** RDB 单例：建库建表，初始化单行表。getStore 单飞（并发首次调用共享同一次初始化），避免竞争抛错。 */

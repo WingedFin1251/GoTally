@@ -2,6 +2,7 @@
 import { http } from '@kit.NetworkKit';
 import { Constants } from '../common/constants/Constants';
 import type { QuotaWindow, QuotaResult, UsageRecord, WorkspaceRef } from '../model/UsageRecord';
+import type { KeyNamePair } from '../model/Stats';
 
 interface QuotaPattern {
   label: string;
@@ -37,6 +38,8 @@ const WORKSPACE_ENTRY_RE: RegExp = /id\s*:\s*"(wrk_[^"]+)"[^{}]*?name\s*:\s*"([^
 const RECORD_ANCHOR_RE: RegExp = /id:\s*"(usg_[^"]+)"/g;
 const PLAN_RE: RegExp = /id:\s*"(usg_[^"]+)"[^}]*?enrichment:\$R\[\d+\]=\{plan:"([^"]+)"\}/g;
 const CREATED_RE: RegExp = /timeCreated:\s*\$R\[\d+\]\s*=\s*new Date\("([^"]+)"\)/;
+/** keys 页面内嵌数据形如 {id:"key_xxx",name:"gongsi",...}（对齐上游 v1.0.2）。 */
+const KEY_ENTRY_RE: RegExp = /\{id:"(key_[A-Za-z0-9]+)",name:"([^"]*)"/;
 
 function clampPercent(v: number): number {
   return Math.max(0, Math.min(100, v));
@@ -254,6 +257,40 @@ export class OpenCodeApi {
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
       return { name: 'Default', workspaceId: hint, success: false, updatedAt: updatedAt, windows: [], error: msg };
+    }
+  }
+
+  /**
+   * 拉取工作区 API Key 名称映射（对齐上游 v1.0.2 fetch_key_names）。
+   * keys 页面内嵌响应数据形如 {id:"key_xxx",name:"gongsi",...}，正则提取 id 与 name 即可获得显示名。
+   * 页面结构变化或网络失败时返回空数组，不影响主流程（既有缓存保持不变）。
+   */
+  static async fetchKeyNames(token: string, workspaceId: string): Promise<KeyNamePair[]> {
+    const cookie = OpenCodeApi.buildCookieHeader(token);
+    const ws = workspaceId.trim();
+    if (cookie === '' || ws === '') {
+      return [];
+    }
+    const url = `https://opencode.ai/workspace/${encodeURIComponent(ws)}/keys`;
+    try {
+      const html = await OpenCodeApi.fetchText(url, cookie, '', `/workspace/${ws}/keys`);
+      const out: KeyNamePair[] = [];
+      const seen = new Set<string>();
+      const re = new RegExp(KEY_ENTRY_RE.source, 'g');
+      let m = re.exec(html);
+      while (m !== null) {
+        const id = m[1];
+        const name = m[2].trim();
+        if (id !== '' && name !== '' && !seen.has(id)) {
+          seen.add(id);
+          out.push({ keyId: id, name: name });
+        }
+        m = re.exec(html);
+      }
+      return out;
+    } catch (e) {
+      console.error('fetchKeyNames failed: ' + (e instanceof Error ? e.message : String(e)));
+      return [];
     }
   }
 

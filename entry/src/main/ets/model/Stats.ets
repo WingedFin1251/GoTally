@@ -50,6 +50,10 @@ export interface TrendPoint {
 
 export interface SessionStat {
   sessionId: string;
+  /** 归属 Key（无会话记录的按 Key 拆分行的 key_id）。 */
+  keyId: string;
+  /** Key 显示名称（来自 key_names 缓存，取不到时为空串）。 */
+  keyName: string;
   requestCount: number;
   totalInputTokens: number;
   uncachedInputTokens: number;
@@ -71,7 +75,16 @@ export interface RecordRow {
   cacheWriteTokens: number;
   costUsd: number;
   sessionId: string;
+  /** 归属 Key 与其显示名称（名称来自 key_names 缓存）。 */
+  keyId: string;
+  keyName: string;
   plan: string;
+}
+
+/** Key 名称缓存条目（key_id → 显示名称）。 */
+export interface KeyNamePair {
+  keyId: string;
+  name: string;
 }
 
 /** 聚合查询的最小接口（UsageRepository 与 MockRepository 均实现）。 */

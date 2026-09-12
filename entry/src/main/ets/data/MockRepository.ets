@@ -1,7 +1,7 @@
 // entry/src/main/ets/data/MockRepository.ets
 import type { UsageStore, UsageDataStore } from './UsageStore';
 import type { UsageRecord, SyncState } from '../model/UsageRecord';
-import type { Totals, ModelStat, DailyStat, TrendPoint, SessionStat, RecordRow } from '../model/Stats';
+import type { Totals, ModelStat, DailyStat, TrendPoint, SessionStat, RecordRow, KeyNamePair } from '../model/Stats';
 import { Constants } from '../common/constants/Constants';
 
 interface HourBucket {
@@ -100,13 +100,16 @@ export class MockRepository implements UsageDataStore {
   async dailyStats(days: number): Promise<DailyStat[]> { return this.calcDaily(days); }
   async todayTrend(): Promise<TrendPoint[]> { return this.calcTrend(); }
   async sessionStatsPage(page: number, pageSize: number, period: string): Promise<[SessionStat[], number]> {
+    const keyNames = await this.getKeyNames();
     const map = new Map<string, SessionStat>();
     for (const r of this.records) {
       if (!this.inPeriod(r, period)) { continue; }
-      let s = map.get(r.sessionId);
+      // 与真实仓储一致：无 session_id 时按 key_id 分组（避免全部合并为「未归属」）
+      const gk = r.sessionId !== '' ? r.sessionId : (r.keyId !== '' ? r.keyId : '');
+      let s = map.get(gk);
       if (s === undefined) {
-        s = { sessionId: r.sessionId, requestCount: 0, totalInputTokens: 0, uncachedInputTokens: 0, totalOutputTokens: 0, totalReasoningTokens: 0, totalCostUsd: 0, lastAt: r.createdAt };
-        map.set(r.sessionId, s);
+        s = { sessionId: gk, keyId: r.keyId, keyName: keyNames.get(r.keyId) ?? '', requestCount: 0, totalInputTokens: 0, uncachedInputTokens: 0, totalOutputTokens: 0, totalReasoningTokens: 0, totalCostUsd: 0, lastAt: r.createdAt };
+        map.set(gk, s);
       }
       s.requestCount++;
       s.totalInputTokens += r.inputTokens + r.cacheReadTokens + r.cacheWrite5mTokens + r.cacheWrite1hTokens;
@@ -121,7 +124,7 @@ export class MockRepository implements UsageDataStore {
     const total = all.length;
     const start = (page - 1) * pageSize;
     const rows = all.slice(start, start + pageSize).map((s): SessionStat => ({
-      sessionId: s.sessionId, requestCount: s.requestCount, totalInputTokens: s.totalInputTokens,
+      sessionId: s.sessionId, keyId: s.keyId, keyName: s.keyName, requestCount: s.requestCount, totalInputTokens: s.totalInputTokens,
       uncachedInputTokens: s.uncachedInputTokens, totalOutputTokens: s.totalOutputTokens,
       totalReasoningTokens: s.totalReasoningTokens, totalCostUsd: Number(s.totalCostUsd.toFixed(6)), lastAt: s.lastAt,
     }));
@@ -129,6 +132,7 @@ export class MockRepository implements UsageDataStore {
   }
 
   async usageRecordsPage(page: number, pageSize: number, model: string | null, period: string): Promise<[RecordRow[], number]> {
+    const keyNames = await this.getKeyNames();
     let list = this.records.filter((r) => this.inPeriod(r, period));
     list = list.filter((r) => model === null || model === '' || r.model === model);
     list = list.slice().sort((a, b) => b.createdAt.localeCompare(a.createdAt));
@@ -138,10 +142,20 @@ export class MockRepository implements UsageDataStore {
       usgId: r.usgId, createdAt: r.createdAt, model: r.model, provider: r.provider,
       inputTokens: r.inputTokens, outputTokens: r.outputTokens, reasoningTokens: r.reasoningTokens,
       cacheReadTokens: r.cacheReadTokens, cacheWriteTokens: r.cacheWrite5mTokens + r.cacheWrite1hTokens,
-      costUsd: r.costUsd, sessionId: r.sessionId, plan: r.plan,
+      costUsd: r.costUsd, sessionId: r.sessionId, keyId: r.keyId, keyName: keyNames.get(r.keyId) ?? '', plan: r.plan,
     }));
     return [rows, total];
   }
+
+  async getKeyNames(): Promise<Map<string, string>> {
+    const m = new Map<string, string>();
+    for (const r of this.records) {
+      if (r.keyId !== '') { m.set(r.keyId, `key-${r.keyId}`); }
+    }
+    return m;
+  }
+
+  async saveKeyNames(pairs: KeyNamePair[]): Promise<void> { /* Mock：无需持久化 */ }
 
   async listModels(): Promise<string[]> { return Array.from(new Set(this.records.map((r) => r.model))).sort(); }
 

@@ -11,6 +11,8 @@ import { Constants } from '../common/constants/Constants';
 import { ConfigurationConstant, common } from '@kit.AbilityKit';
 import { pasteboard } from '@kit.BasicServicesKit';
 import { setLanguage } from '../common/utils/Locale';
+import { AppInfo } from '../common/utils/AppInfo';
+import { Updater } from '../common/utils/Updater';
 import { HdsNavigation, HdsNavDestination } from '@kit.UIDesignKit';
 import { buildTitleBar } from '../common/utils/NavTitleBar';
 
@@ -29,6 +31,9 @@ export struct SettingsPage {
   @State syncState: SyncState = { lastSyncAt: '', lastSyncStatus: '', lastSyncError: '', lastInsertedCount: 0, deepestPageFetched: -1, totalRecords: 0, oldestRecordAt: '', newestRecordAt: '' };
   @State syncing: boolean = false;
   @State syncProgressMsg: string = '';
+  /** 应用版本号（读取 bundle 信息，单一来源，避免多处硬编码不一致）。 */
+  @State appVersion: string = '';
+  @State checkingUpdate: boolean = false;
   /** 上一次 onProgress 上报的阶段，用于捕捉 done/error 完成时刻（仅触发一次 toast/刷新）。 */
   private lastPhase: string = 'idle';
   /** 滚动联动：向下滚隐藏悬浮导航栏、向上滚显示（由 Index 播放 HDS 滚动动画）。 */
@@ -54,6 +59,7 @@ export struct SettingsPage {
 
   aboutToAppear(): void {
     this.load();
+    this.loadVersion();
     const mgr = DataProvider.getSyncManager();
     // 以当前阶段为基线，避免进入页面时把旧消息误当作新完成事件
     this.lastPhase = mgr.getProgress().phase;
@@ -268,14 +274,10 @@ export struct SettingsPage {
 
         // 更新
         SettingsCard({ title: $r('app.string.set_update') }) {
-          SettingRow({ title: $r('app.string.current_version'), desc: '1.2.0' }) {}
+          SettingRow({ title: $r('app.string.current_version'), desc: this.appVersion !== '' ? this.appVersion : '—' }) {}
           SettingRow({ title: $r('app.string.check_update'), desc: $r('app.string.check_update_desc') }) {
-            Button($r('app.string.check_update_btn')).fontSize(12).height(30).onClick(() => {
-              const lctx = this.getUIContext().getHostContext();
-              if (lctx !== undefined) {
-                (lctx as common.UIAbilityContext).openLink('https://github.com/WingedFin1251/GoTally/releases');
-              }
-            })
+            Button($r('app.string.check_update_btn')).fontSize(12).height(30).enabled(!this.checkingUpdate)
+              .onClick(() => { this.checkUpdate(); })
           }
         }
       }
@@ -326,6 +328,86 @@ export struct SettingsPage {
       this.getUIContext().getPromptAction().showToast({ message: msg });
     } catch (e) {
       console.error('toast failed: ' + (e instanceof Error ? e.message : String(e)));
+    }
+  }
+
+  /** 读取应用版本号（单一来源：bundle 信息）。 */
+  private async loadVersion(): Promise<void> {
+    this.appVersion = await AppInfo.versionName();
+  }
+
+  /** 取字符串资源并按 {0} 替换参数（个别版本 getStringSync 不执行占位符格式化，故手动替换）。 */
+  private str(resId: number, arg: string): string {
+    try {
+      const ctx = this.getUIContext().getHostContext();
+      if (ctx === undefined) {
+        return '';
+      }
+      const tpl = ctx.resourceManager.getStringSync(resId);
+      return arg === '' ? tpl : tpl.split('{0}').join(arg);
+    } catch (e) {
+      console.error('str failed: ' + (e instanceof Error ? e.message : String(e)));
+      return '';
+    }
+  }
+
+  /**
+   * 检查更新（对齐上游 v1.0.2）：API 优先并自动重试，失败降级 Releases Atom 流；
+   * 结果分三种呈现：发现新版本（可前往下载）/ 已是最新 / 检查失败（含原因）。
+   */
+  private async checkUpdate(): Promise<void> {
+    if (this.checkingUpdate) {
+      return;
+    }
+    this.checkingUpdate = true;
+    this.showToastSafe(this.str($r('app.string.update_checking').id, ''));
+    const r = await Updater.check();
+    this.checkingUpdate = false;
+    if (!r.ok) {
+      this.showInfoDialog(this.str($r('app.string.update_failed').id, ''), r.error);
+      return;
+    }
+    if (!r.hasUpdate) {
+      this.showToastSafe(this.str($r('app.string.update_none').id, r.current));
+      return;
+    }
+    const title = this.str($r('app.string.update_found').id, r.latest);
+    const notes = r.notes !== '' ? r.notes : this.str($r('app.string.update_no_notes').id, '');
+    this.showDownloadDialog(title, notes, r.releaseUrl);
+  }
+
+  /** 单按钮提示弹窗（检查失败等）。 */
+  private showInfoDialog(title: string, message: string): void {
+    try {
+      this.getUIContext().showAlertDialog({
+        title: title,
+        message: message,
+        primaryButton: { value: $r('app.string.ok'), action: () => {} },
+      });
+    } catch (e) {
+      console.error('dialog failed: ' + (e instanceof Error ? e.message : String(e)));
+    }
+  }
+
+  /** 发现新版本弹窗：稍后 / 前往下载（打开该 Release 页）。 */
+  private showDownloadDialog(title: string, message: string, url: string): void {
+    try {
+      this.getUIContext().showAlertDialog({
+        title: title,
+        message: message,
+        primaryButton: { value: $r('app.string.update_later'), action: () => {} },
+        secondaryButton: {
+          value: $r('app.string.update_download'),
+          action: () => {
+            const lctx = this.getUIContext().getHostContext();
+            if (lctx !== undefined) {
+              (lctx as common.UIAbilityContext).openLink(url);
+            }
+          },
+        },
+      });
+    } catch (e) {
+      console.error('dialog failed: ' + (e instanceof Error ? e.message : String(e)));
     }
   }
 

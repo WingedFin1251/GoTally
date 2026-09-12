@@ -2,6 +2,7 @@
 import { common } from '@kit.AbilityKit';
 import { HdsNavigation, HdsNavDestination } from '@kit.UIDesignKit';
 import { buildTitleBar } from '../common/utils/NavTitleBar';
+import { AppInfo } from '../common/utils/AppInfo';
 
 @Component
 export struct AboutPage {
@@ -14,6 +15,16 @@ export struct AboutPage {
   /** 滚动联动：向下滚隐藏悬浮导航栏、向上滚显示（由 Index 播放 HDS 滚动动画）。 */
   onNavChanged?: (hide: boolean) => void;
   private scrollHidden: boolean = false;
+  /** 应用版本号（读取 bundle 信息，单一来源，避免与设置页/安装包不一致）。 */
+  @State appVersion: string = '';
+
+  aboutToAppear(): void {
+    this.loadVersion();
+  }
+
+  private async loadVersion(): Promise<void> {
+    this.appVersion = await AppInfo.versionName();
+  }
 
   /** 滚动联动：向下滚隐藏悬浮导航栏，向上滚显示。 */
   private handleNavScroll(offset: number): void {
@@ -45,7 +56,7 @@ export struct AboutPage {
               .fontSize(22)
               .fontWeight(FontWeight.Bold)
               .fontColor($r('app.color.text_primary'))
-            Text('v1.2.0')
+            Text(this.appVersion !== '' ? `v${this.appVersion}` : '')
               .fontSize(12)
               .fontColor($r('app.color.text_muted'))
           }

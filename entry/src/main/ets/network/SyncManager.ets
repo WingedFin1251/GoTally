@@ -3,6 +3,7 @@ import { Constants } from '../common/constants/Constants';
 import type { UsageStore } from '../data/UsageStore';
 import type { UsageFetcher } from './UsageFetcher';
 import type { UsageRecord } from '../model/UsageRecord';
+import type { KeyNamePair } from '../model/Stats';
 
 export interface SyncProgress {
   running: boolean;
@@ -32,6 +33,8 @@ export class SyncManager {
   private timer: number | null = null;
   private intervalProvider: () => Promise<number>;
   private resolveWorkspace: ((hint: string, token: string) => Promise<string>) | null;
+  /** 可选的 Key 名称拉取器（同步收尾时刷新 key_id → 名称缓存）。 */
+  private keyNameFetcher: ((workspaceId: string, token: string) => Promise<KeyNamePair[]>) | null;
   onProgress: (p: SyncProgress) => void = () => {};
   /** 同步终止回调（成功/部分成功/失败均触发，且无论哪个页面在前台）：供应用外壳统一广播「数据已变更」。 */
   onFinished: (result: SyncResult) => void = () => {};
@@ -40,11 +43,28 @@ export class SyncManager {
     store: UsageStore,
     fetcher: UsageFetcher,
     intervalProvider?: () => Promise<number>,
-    resolveWorkspace?: (hint: string, token: string) => Promise<string>) {
+    resolveWorkspace?: (hint: string, token: string) => Promise<string>,
+    keyNameFetcher?: (workspaceId: string, token: string) => Promise<KeyNamePair[]>) {
     this.store = store;
     this.fetcher = fetcher;
     this.intervalProvider = intervalProvider !== undefined ? intervalProvider : async (): Promise<number> => 300;
     this.resolveWorkspace = resolveWorkspace !== undefined ? resolveWorkspace : null;
+    this.keyNameFetcher = keyNameFetcher !== undefined ? keyNameFetcher : null;
+  }
+
+  /** 拉取并合并保存 Key 名称映射；任何失败都只记日志，不影响同步结果与既有缓存。 */
+  private async refreshKeyNames(workspaceId: string, token: string): Promise<void> {
+    if (this.keyNameFetcher === null) {
+      return;
+    }
+    try {
+      const pairs = await this.keyNameFetcher(workspaceId, token);
+      if (pairs.length > 0) {
+        await this.store.saveKeyNames(pairs);
+      }
+    } catch (e) {
+      console.error('refreshKeyNames failed: ' + (e instanceof Error ? e.message : String(e)));
+    }
   }
 
   getProgress(): SyncProgress {
@@ -167,6 +187,9 @@ export class SyncManager {
       if (windowDays !== null && windowDays > 0) {
         await this.store.pruneOldRecords(windowDays);
       }
+
+      // 刷新 API Key 名称缓存（合并写入；单次失败不清空既有名称）
+      await this.refreshKeyNames(workspaceId, token);
 
       if (failedPages > 0) {
         await this.store.updateSyncState('partial', '部分页拉取失败 (数据可能不完整)', totalInserted);
