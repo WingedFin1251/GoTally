@@ -121,17 +121,6 @@ export struct RecordsPage {
       .width('100%')
 
       Column() {
-        Row() {
-          Text($r('app.string.col_key')).fontSize(11).layoutWeight(1.4).fontColor($r('app.color.text_muted')).maxLines(1).textOverflow({ overflow: TextOverflow.Ellipsis })
-          Text($r('app.string.col_session')).fontSize(11).layoutWeight(1.8).fontColor($r('app.color.text_muted')).maxLines(1).textOverflow({ overflow: TextOverflow.Ellipsis })
-          Text($r('app.string.col_input')).fontSize(11).layoutWeight(1).fontColor($r('app.color.text_muted')).textAlign(TextAlign.End)
-          Text($r('app.string.col_output')).fontSize(11).layoutWeight(1).fontColor($r('app.color.text_muted')).textAlign(TextAlign.End)
-          Text($r('app.string.col_requests')).fontSize(11).layoutWeight(1).fontColor($r('app.color.text_muted')).textAlign(TextAlign.End)
-          Text($r('app.string.col_cost')).fontSize(11).layoutWeight(1).fontColor($r('app.color.text_muted')).textAlign(TextAlign.End)
-        }
-        .width('100%')
-        .padding({ top: 6, bottom: 6 })
-
         if (this.vm.sessions.length === 0) {
           Text($r('app.string.list_empty_hint'))
             .fontSize(12)
@@ -141,17 +130,41 @@ export struct RecordsPage {
             .padding({ top: 14, bottom: 14 })
         } else {
           ForEach(this.vm.sessions, (s: SessionStat) => {
-            Row() {
-              Text(this.keyLabel(s.keyName, s.keyId)).fontSize(11).layoutWeight(1.4).fontColor($r('app.color.text_secondary')).maxLines(1)
-                .textOverflow({ overflow: TextOverflow.Ellipsis })
-              Text(this.shortSession(s.sessionId)).fontSize(12).layoutWeight(1.8).fontColor($r('app.color.text_primary')).maxLines(1)
-              Text(formatTokensUi(s.totalInputTokens)).fontSize(12).layoutWeight(1).textAlign(TextAlign.End).fontColor($r('app.color.text_secondary'))
-              Text(formatTokensUi(s.totalOutputTokens)).fontSize(12).layoutWeight(1).textAlign(TextAlign.End).fontColor($r('app.color.text_secondary'))
-              Text(`${s.requestCount}`).fontSize(12).layoutWeight(1).textAlign(TextAlign.End).fontColor($r('app.color.text_secondary'))
-              Text(formatCost(s.totalCostUsd, this.currency, this.usdCny)).fontSize(12).layoutWeight(1).textAlign(TextAlign.End).fontColor($r('app.color.text_secondary'))
+            // 与会话用量同款两行排布：首行 = 会话 + 成本；次行 = Key·请求数 + 输入/输出
+            Column({ space: 3 }) {
+              Row() {
+                Text(this.shortSession(s.sessionId))
+                  .fontSize(13)
+                  .fontColor($r('app.color.text_primary'))
+                  .layoutWeight(1)
+                  .maxLines(1)
+                  .textOverflow({ overflow: TextOverflow.Ellipsis })
+                  .onClick(() => { this.toast(s.sessionId === '' ? '未归属' : s.sessionId); })
+                Text(formatCost(s.totalCostUsd, this.currency, this.usdCny))
+                  .fontSize(13)
+                  .fontWeight(FontWeight.Medium)
+                  .fontColor($r('app.color.accent'))
+                  .margin({ left: 8 })
+              }
+              .width('100%')
+
+              Row() {
+                Text(this.sessionMeta(s))
+                  .fontSize(11)
+                  .fontColor($r('app.color.text_muted'))
+                  .layoutWeight(1)
+                  .maxLines(1)
+                  .textOverflow({ overflow: TextOverflow.Ellipsis })
+                Text(this.tokensTextOf(s.totalInputTokens, s.totalOutputTokens))
+                  .fontSize(11)
+                  .fontColor($r('app.color.text_secondary'))
+                  .margin({ left: 8 })
+              }
+              .width('100%')
             }
             .width('100%')
-            .padding({ top: 5, bottom: 5 })
+            .padding({ top: 7, bottom: 7 })
+            .border({ width: { bottom: 1 }, color: $r('app.color.divider') })
           }, (s: SessionStat) => `${s.sessionId}-${this.dataVersion}`)
         }
       }
@@ -193,21 +206,39 @@ export struct RecordsPage {
     return key === '—' ? t : `${key} · ${t}`;
   }
 
-  /** 记录次行右侧：输入 / 输出 Token（带本地化标签，避免只用箭头产生歧义）。 */
+  /** 会话次行左侧：Key 名称 · N 次请求。 */
+  private sessionMeta(s: SessionStat): string {
+    const key = this.keyLabel(s.keyName, s.keyId);
+    const req = this.str($r('app.string.requests_count').id, `${s.requestCount}`);
+    return key === '—' ? req : `${key} · ${req}`;
+  }
+
+  /** 记录次行右侧：输入 / 输出 Token。 */
   private tokensText(r: RecordRow): string {
+    return this.tokensTextOf(r.inputTokens, r.outputTokens);
+  }
+
+  /** 次行右侧文本：输入 / 输出 Token（带本地化标签，避免只用箭头产生歧义）。 */
+  private tokensTextOf(input: number, output: number): string {
     const inLabel = this.res($r('app.string.input').id);
     const outLabel = this.res($r('app.string.output').id);
-    return `${inLabel} ${formatTokensUi(r.inputTokens)} · ${outLabel} ${formatTokensUi(r.outputTokens)}`;
+    return `${inLabel} ${formatTokensUi(input)} · ${outLabel} ${formatTokensUi(output)}`;
   }
 
   /** 取字符串资源文本（无占位符场景）。 */
   private res(id: number): string {
+    return this.str(id, '');
+  }
+
+  /** 取字符串资源并按 {0} 替换参数（个别版本 getStringSync 不执行占位符格式化，故手动替换）。 */
+  private str(id: number, arg: string): string {
     try {
       const ctx = this.getUIContext().getHostContext();
       if (ctx === undefined) {
         return '';
       }
-      return ctx.resourceManager.getStringSync(id);
+      const tpl = ctx.resourceManager.getStringSync(id);
+      return arg === '' ? tpl : tpl.split('{0}').join(arg);
     } catch (e) {
       console.error('res failed: ' + (e instanceof Error ? e.message : String(e)));
       return '';
