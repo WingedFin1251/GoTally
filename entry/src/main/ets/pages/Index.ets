@@ -16,6 +16,8 @@ import { AboutPage } from './AboutPage';
 struct Index {
   @State currentTab: number = 0;
   @State loggedIn: boolean = false;
+  /** 登录态是否已判定：未判定前渲染中性占位（与系统闪屏一致），避免冷启动闪现欢迎页/登录页。 */
+  @State authChecked: boolean = false;
   @State navIndicatorHeight: number = 0;
   /** 沉浸光感档位（设置页可调）：0 弱 / 1 均衡 / 2 强，映射 HDS 系统材质等级。 */
   @StorageProp('glowLevel') glowLevel: number = 1;
@@ -24,6 +26,12 @@ struct Index {
   private tabsController: HdsTabsController = new HdsTabsController();
 
   aboutToAppear(): void {
+    // 外壳已在 loadContent 前预读登录态（启动闪屏期间完成）：首帧直接采用，
+    // 不再先用 loggedIn=false 渲染欢迎页，从而消除「闪一下登录界面」。
+    if (AppStorage.get<boolean>('authPreloaded') === true) {
+      this.loggedIn = AppStorage.get<boolean>('hasToken') ?? false;
+      this.authChecked = true;
+    }
     this.initLocale();
     this.checkLogin();
     this.applyAutoSync();
@@ -80,8 +88,14 @@ struct Index {
   }
 
   private async checkLogin(): Promise<void> {
-    const token = await DataProvider.getStore().getToken();
-    this.loggedIn = token.trim() !== '';
+    try {
+      const token = await DataProvider.getStore().getToken();
+      this.loggedIn = token.trim() !== '';
+    } catch (e) {
+      console.error('checkLogin failed: ' + (e instanceof Error ? e.message : String(e)));
+    } finally {
+      this.authChecked = true;
+    }
   }
 
   /** 按 token 与自动同步开关，启动/停止同步循环。 */
@@ -183,8 +197,25 @@ struct Index {
     })
   }
 
+  /** 冷启动占位：与系统启动闪屏同背景同图标，登录态判定完成后无缝切到首页或欢迎页。 */
+  @Builder
+  SplashPlaceholder() {
+    Column() {
+      Image($r('app.media.startIcon'))
+        .width(96)
+        .height(96)
+        .objectFit(ImageFit.Contain)
+    }
+    .width('100%')
+    .height('100%')
+    .justifyContent(FlexAlign.Center)
+    .backgroundColor($r('app.color.start_window_background'))
+  }
+
   build() {
-    if (!this.loggedIn) {
+    if (!this.authChecked) {
+      this.SplashPlaceholder();
+    } else if (!this.loggedIn) {
       this.WelcomePage();
     } else {
       HdsTabs({

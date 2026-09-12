@@ -4,6 +4,7 @@ import { hilog } from '@kit.PerformanceAnalysisKit';
 import { window } from '@kit.ArkUI';
 import { AppContext } from '../common/AppContext';
 import { SettingsStore } from '../data/SettingsStore';
+import { DataProvider } from '../data/DataProvider';
 
 const DOMAIN = 0x0000;
 
@@ -55,12 +56,40 @@ export default class EntryAbility extends UIAbility {
         hilog.info(DOMAIN, 'testTag', 'Succeeded in loading the content.');
       });
     };
-    // 沉浸式布局：内容延伸到状态栏/导航条区域，再配合页面内的系统避让区内边距实现全屏效果
+    // 先在启动闪屏期间预读登录态，再加载首页：Index 首帧即可判定登录态，
+    // 避免「先渲染欢迎/登录页、再跳首页」的闪屏跳变。
+    this.preloadAuthState().then(() => {
+      // 沉浸式布局：内容延伸到状态栏/导航条区域，再配合页面内的系统避让区内边距实现全屏效果
+      try {
+        windowStage.getMainWindowSync().setWindowLayoutFullScreen(true).then(loadContent).catch(loadContent);
+      } catch (e) {
+        loadContent();
+      }
+    });
+  }
+
+  /**
+   * 启动前预读本地 token 并写入 AppStorage（authPreloaded / hasToken）。
+   * 读取失败或超时（首次启动需建库/迁移历史数据，可能较慢）时不置 authPreloaded，
+   * 交由 Index 的占位页 + 异步判定兜底，避免启动闪屏被长时间卡住。
+   */
+  private async preloadAuthState(): Promise<void> {
+    const read = async (): Promise<void> => {
+      const token = await DataProvider.getStore().getToken();
+      AppStorage.setOrCreate('hasToken', token.trim() !== '');
+      AppStorage.setOrCreate('authPreloaded', true);
+    };
     try {
-      windowStage.getMainWindowSync().setWindowLayoutFullScreen(true).then(loadContent).catch(loadContent);
+      await Promise.race([read(), EntryAbility.delay(300)]);
     } catch (e) {
-      loadContent();
+      hilog.warn(DOMAIN, 'testTag', 'Failed to preload auth state. Cause: %{public}s', String(e));
     }
+  }
+
+  private static delay(ms: number): Promise<void> {
+    return new Promise<void>((resolve: () => void) => {
+      setTimeout(resolve, ms);
+    });
   }
 
   onWindowStageDestroy(): void { /* 释放资源 */ }
