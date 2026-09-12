@@ -10,3 +10,10 @@
 /.clang-tidy
 **/.test
 /.appanalyzer
+
+# IDE / AI 插件本地生成物
+/.codegenie
+
+# 上游参考源码副本（Python 版 opencode-go-gauge，仅供本地比对移植，不入库）
+/opencode-go-gauge-main
+/opencode-go-gauge-2.1.0
