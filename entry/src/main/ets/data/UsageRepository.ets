@@ -595,20 +595,34 @@ export class UsageRepository implements UsageDataStore {
     }
   }
 
+  /**
+   * 组合「模型筛选 + 周期」的 WHERE 片段与参数（**参数顺序与占位符顺序严格一致**）。
+   * 独立成静态纯函数便于单测覆盖：此前把周期参数预先放入数组、而 SQL 里 model 占位符在前，
+   * 导致「7天/30天 + 指定模型」时 model 拿到 '-7 days' 而查不到任何数据。
+   */
+  static recordsFilter(model: string | null, period: string): PeriodFilter {
+    const pf = UsageRepository.periodWhere(period);
+    const conds: string[] = [];
+    const params: relationalStore.ValueType[] = [];
+    if (model !== null && model !== '') {
+      conds.push('model = ?');
+      params.push(model);
+    }
+    if (pf.clause !== '') {
+      conds.push(pf.clause);
+      for (const p of pf.params) {
+        params.push(p);
+      }
+    }
+    return { clause: conds.length > 0 ? `WHERE ${conds.join(' AND ')}` : '', params: params };
+  }
+
   async usageRecordsPage(page: number, pageSize: number, model: string | null, period: string): Promise<[RecordRow[], number]> {
     try {
       const store = await RdbHelper.getStore();
-      const f = UsageRepository.periodWhere(period);
-      const conds: string[] = [];
-      const params: relationalStore.ValueType[] = [...f.params];
-      if (model !== null && model !== '') {
-        conds.push('model = ?');
-        params.push(model);
-      }
-      if (f.clause !== '') {
-        conds.push(f.clause);
-      }
-      const where = conds.length > 0 ? `WHERE ${conds.join(' AND ')}` : '';
+      const f = UsageRepository.recordsFilter(model, period);
+      const where = f.clause;
+      const params = f.params;
       const countRs = await store.querySql(`SELECT COUNT(*) AS c FROM usage_records ${where}`, params);
       let total = 0;
       if (countRs.goToFirstRow()) {
