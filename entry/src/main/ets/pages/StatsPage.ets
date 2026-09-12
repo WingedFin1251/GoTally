@@ -440,6 +440,7 @@ export struct StatsPage {
         })
       }
       .titleBar(buildTitleBar($r('app.string.stats_title'), this.glowLevel))
+      .hideBackButton(true)
       .bindToScrollable([this.scroller])
     }
     .mode(NavigationMode.Stack)

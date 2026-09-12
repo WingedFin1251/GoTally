@@ -311,6 +311,7 @@ export struct RecordsPage {
         })
       }
       .titleBar(buildTitleBar($r('app.string.records_page'), this.glowLevel))
+      .hideBackButton(true)
       .bindToScrollable([this.scroller])
     }
     .mode(NavigationMode.Stack)

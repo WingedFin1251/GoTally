@@ -238,6 +238,7 @@ export struct DashboardPage {
         })
       }
       .titleBar(buildTitleBar($r('app.string.home_title'), this.glowLevel))
+      .hideBackButton(true)
       .bindToScrollable([this.scroller])
     }
     .mode(NavigationMode.Stack)

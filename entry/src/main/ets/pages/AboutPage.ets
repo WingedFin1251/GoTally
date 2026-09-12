@@ -150,6 +150,7 @@ export struct AboutPage {
     .height('100%')
       }
       .titleBar(buildTitleBar($r('app.string.about_title'), this.glowLevel))
+      .hideBackButton(true)
       .bindToScrollable([this.scroller])
     }
     .mode(NavigationMode.Stack)
