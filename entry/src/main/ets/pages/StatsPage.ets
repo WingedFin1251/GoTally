@@ -9,6 +9,8 @@ import { Constants } from '../common/constants/Constants';
 import { SettingsStore } from '../data/SettingsStore';
 import { OpenCodeApi } from '../network/OpenCodeApi';
 import type { Totals, ModelStat, DailyStat, TrendPoint } from '../model/Stats';
+import { HdsNavigation, HdsNavDestination } from '@kit.UIDesignKit';
+import { buildTitleBar } from '../common/utils/NavTitleBar';
 
 const EMPTY_TOTALS: Totals = { requestCount: 0, sessionCount: 0, totalInputTokens: 0, uncachedInputTokens: 0, totalReasoningTokens: 0, cacheHitTokens: 0, cacheWriteTokens: 0, totalOutputTokens: 0, totalCostUsd: 0, hitRate: 0 };
 
@@ -31,6 +33,8 @@ const EMPTY_CHART: ChartSnapshot = { period: '7d', dim: 'input', totals: EMPTY_T
 export struct StatsPage {
   @State chart: ChartSnapshot = EMPTY_CHART;
   private vm: StatsViewModel = new StatsViewModel();
+  /** 页面滚动控制器：绑定给 HDS 标题栏，驱动「内容滚入栏下渐变模糊」。 */
+  private scroller: Scroller = new Scroller();
   /** 请求序号：只采纳最后一次刷新的结果，丢弃竞态中迟到的旧数据。 */
   private reqSeq: number = 0;
   @StorageProp('currency') currency: string = 'CNY';
@@ -403,42 +407,42 @@ export struct StatsPage {
   }
 
   build() {
-    Stack({ alignContent: Alignment.Top }) {
-      // 滚动内容：可滚到固定标题栏下方（标题栏模糊蒙版保证可读性）
-      Scroll() {
-        Column({ space: 12 }) {
-          this.KpiCards()
-          this.TokenDetail()
-          this.ModelRank()
-          this.TrendCard()
-        }
-        .width('100%')
-        .padding({ left: 12, right: 12, top: this.statusBarHeight + 52, bottom: 96 })
-      }
-      .width('100%')
-      .height('100%')
-      .backgroundColor($r('app.color.bg_page'))
-      .expandSafeArea([SafeAreaType.SYSTEM], [SafeAreaEdge.BOTTOM])
-      .scrollBar(BarState.Off)
-      .edgeEffect(EdgeEffect.Spring, { alwaysEnabled: true })
-      .onScrollFrameBegin((offset: number) => {
-        this.handleNavScroll(offset);
-        return { offsetRemain: offset };
-      })
+    // HDS 沉浸光感标题栏（对齐参考项目）：内容滚入栏下触发渐变模糊，材质档位跟随「沉浸光感」设置
+    HdsNavigation() {
+      HdsNavDestination() {
+        Scroll(this.scroller) {
+          Column({ space: 12 }) {
+            // 周期筛选置于内容顶部：滚动时与内容一同滚入标题栏，直观体现沉浸渐变模糊
+            Row() {
+              this.RangePills()
+            }
+            .width('100%')
 
-      // 固定标题栏：顶部让出状态栏（不与通知栏重叠），背景模糊
-      Column() {
-        Row() {
-          Text($r('app.string.stats_title')).fontSize(18).fontWeight(FontWeight.Bold)
-          Blank()
-          this.RangePills()
+            this.KpiCards()
+            this.TokenDetail()
+            this.ModelRank()
+            this.TrendCard()
+          }
+          .width('100%')
+          .padding({ left: 12, right: 12, top: this.statusBarHeight + 60, bottom: 96 })
         }
         .width('100%')
+        .height('100%')
+        .backgroundColor($r('app.color.bg_page'))
+        .expandSafeArea([SafeAreaType.SYSTEM], [SafeAreaEdge.BOTTOM])
+        .scrollBar(BarState.Off)
+        .edgeEffect(EdgeEffect.Spring, { alwaysEnabled: true })
+        .onScrollFrameBegin((offset: number) => {
+          this.handleNavScroll(offset);
+          return { offsetRemain: offset };
+        })
       }
-      .width('100%')
-      .padding({ left: 12, right: 12, top: 12 + this.statusBarHeight, bottom: 10 })
-      .backgroundBlurStyle(BlurStyle.Regular)
+      .titleBar(buildTitleBar($r('app.string.stats_title')))
+      .bindToScrollable([this.scroller])
     }
+    .mode(NavigationMode.Stack)
+    .hideTitleBar(true)
+    .hideToolBar(true)
     .width('100%')
     .height('100%')
   }
