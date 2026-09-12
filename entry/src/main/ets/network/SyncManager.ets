@@ -33,6 +33,8 @@ export class SyncManager {
   private intervalProvider: () => Promise<number>;
   private resolveWorkspace: ((hint: string, token: string) => Promise<string>) | null;
   onProgress: (p: SyncProgress) => void = () => {};
+  /** 同步终止回调（成功/部分成功/失败均触发，且无论哪个页面在前台）：供应用外壳统一广播「数据已变更」。 */
+  onFinished: (result: SyncResult) => void = () => {};
 
   constructor(
     store: UsageStore,
@@ -60,6 +62,13 @@ export class SyncManager {
     this.onProgress(this.getProgress());
   }
 
+  /** 终止收尾：复位 busy 并广播终止事件（所有终止分支统一走这里，避免漏通知导致界面数据不刷新）。 */
+  private finish(result: SyncResult): SyncResult {
+    this.busy = false;
+    this.onFinished(result);
+    return result;
+  }
+
   async sync(mode: 'incremental' | 'full'): Promise<SyncResult> {
     const token = await this.store.getToken();
     if (token.trim() === '') {
@@ -84,8 +93,7 @@ export class SyncManager {
           const msg = e instanceof Error ? e.message : String(e);
           await this.store.updateSyncState('error', msg, 0);
           this.setPhase('error', msg);
-          this.busy = false;
-          return { ok: false, error: msg };
+          return this.finish({ ok: false, error: msg });
         }
       }
       const windowDays = await this.store.getWindowDays();
@@ -139,8 +147,7 @@ export class SyncManager {
             const msg = '网络请求失败 (超时/中断)';
             this.setPhase('error', msg);
             await this.store.updateSyncState('error', msg, totalInserted);
-            this.busy = false;
-            return { ok: false, error: msg, inserted: totalInserted };
+            return this.finish({ ok: false, error: msg, inserted: totalInserted });
           }
         }
 
@@ -164,20 +171,17 @@ export class SyncManager {
       if (failedPages > 0) {
         await this.store.updateSyncState('partial', '部分页拉取失败 (数据可能不完整)', totalInserted);
         this.setPhase('done', '部分页拉取失败');
-        this.busy = false;
-        return { ok: true, partial: true, failedPages: failedPages, inserted: totalInserted };
+        return this.finish({ ok: true, partial: true, failedPages: failedPages, inserted: totalInserted });
       }
 
       await this.store.updateSyncState('ok', '', totalInserted);
       this.setPhase('done', `同步完成, 新增 ${totalInserted} 条`);
-      this.busy = false;
-      return { ok: true, inserted: totalInserted };
+      return this.finish({ ok: true, inserted: totalInserted });
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
       await this.store.updateSyncState('error', msg, this.progress.inserted);
       this.setPhase('error', msg);
-      this.busy = false;
-      return { ok: false, error: msg };
+      return this.finish({ ok: false, error: msg });
     }
   }
 

@@ -106,9 +106,6 @@ export struct SettingsPage {
       msg = p.phase === 'done' ? `同步完成，新增 ${p.inserted} 条` : '同步失败';
     }
     this.showToastSafe(msg);
-    // 通知其他页面（首页、统计页）数据已变更，触发自动刷新
-    AppStorage.setOrCreate('syncFinishedVersion',
-      (AppStorage.get('syncFinishedVersion') as number ?? 0) + 1);
   }
 
   /** 当前设置项选中值（Builder 内部读 this.settings，随状态变化刷新选中态）。 */

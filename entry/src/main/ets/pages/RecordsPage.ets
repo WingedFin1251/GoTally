@@ -21,6 +21,9 @@ export struct RecordsPage {
   @StorageProp('glowLevel') glowLevel: number = 1;
   /** 页面滚动控制器：绑定给 HDS 标题栏，驱动「内容滚入栏下渐变模糊」。 */
   private scroller: Scroller = new Scroller();
+  @Watch('onSyncFinished') @StorageProp('syncFinishedVersion') syncFinishedVersion: number = 0;
+  /** 数据版本号：每次重载完成 +1，作为 ForEach 键后缀强制列表行重建（避免复用旧闭包导致数值不刷新）。 */
+  @State dataVersion: number = 0;
   private reloadRetried: boolean = false;
   /** 滚动联动：向下滚隐藏悬浮导航栏、向上滚显示（由 Index 播放 HDS 滚动动画）。 */
   onNavChanged?: (hide: boolean) => void;
@@ -42,6 +45,11 @@ export struct RecordsPage {
     this.initCurrency();
   }
 
+  /** 后台/其他页面同步完成后自动刷新记录页数据（无需手动切换周期筛选）。 */
+  private onSyncFinished(): void {
+    this.reload();
+  }
+
   private async reload(): Promise<void> {
     try {
       await this.vm.loadSessions(1);
@@ -53,6 +61,9 @@ export struct RecordsPage {
         this.reloadRetried = true;
         setTimeout(() => { this.reload(); }, 800);
       }
+    } finally {
+      // 无论成败都递增：强制会话/记录列表按最新数据重建
+      this.dataVersion++;
     }
   }
 
@@ -138,7 +149,7 @@ export struct RecordsPage {
             }
             .width('100%')
             .padding({ top: 5, bottom: 5 })
-          }, (s: SessionStat) => s.sessionId)
+          }, (s: SessionStat) => `${s.sessionId}-${this.dataVersion}`)
         }
       }
       .width('100%')
@@ -260,7 +271,7 @@ export struct RecordsPage {
             }
             .width('100%')
             .padding({ top: 4, bottom: 4 })
-          }, (r: RecordRow) => r.usgId)
+          }, (r: RecordRow) => `${r.usgId}-${this.dataVersion}`)
         }
       }
       .width('100%')

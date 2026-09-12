@@ -1,5 +1,6 @@
 // entry/src/main/ets/pages/Index.ets
 import { window } from '@kit.ArkUI';
+import type { SyncResult } from '../network/SyncManager';
 import { HdsAnimationMode, HdsTabs, HdsTabsController, HdsTabsFloatingStyle, hdsMaterial } from '@kit.UIDesignKit';
 import { DataProvider } from '../data/DataProvider';
 import { SettingsStore } from '../data/SettingsStore';
@@ -27,6 +28,19 @@ struct Index {
     this.checkLogin();
     this.applyAutoSync();
     this.resolveSystemInsets();
+    this.bindSyncNotifier();
+  }
+
+  /**
+   * 数据层同步终止 → 由外壳统一广播「数据已变更」（syncFinishedVersion）。
+   * 之前该广播写在设置页的进度回调里，只有设置页在监听时才会发出，
+   * 导致在首页/记录页时同步完成界面不刷新，必须手动切换周期筛选才更新。
+   */
+  private bindSyncNotifier(): void {
+    DataProvider.getSyncManager().onFinished = (result: SyncResult) => {
+      AppStorage.setOrCreate('syncFinishedVersion',
+        (AppStorage.get('syncFinishedVersion') as number ?? 0) + 1);
+    };
   }
 
   onPageShow(): void {
