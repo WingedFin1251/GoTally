@@ -1,10 +1,16 @@
 // entry/src/main/ets/pages/AboutPage.ets
 import { common } from '@kit.AbilityKit';
+import { HdsNavigation, HdsNavDestination } from '@kit.UIDesignKit';
+import { buildTitleBar } from '../common/utils/NavTitleBar';
 
 @Component
 export struct AboutPage {
   @StorageProp('statusBarHeight') statusBarHeight: number = 0;
   @StorageProp('navIndicatorHeight') navIndicatorHeight: number = 0;
+  /** 沉浸光感档位：响应式依赖，改设置后标题栏材质即时更新。 */
+  @StorageProp('glowLevel') glowLevel: number = 1;
+  /** 页面滚动控制器：绑定给 HDS 标题栏，驱动「内容滚入栏下渐变模糊」。 */
+  private scroller: Scroller = new Scroller();
   /** 滚动联动：向下滚隐藏悬浮导航栏、向上滚显示（由 Index 播放 HDS 滚动动画）。 */
   onNavChanged?: (hide: boolean) => void;
   private scrollHidden: boolean = false;
@@ -21,9 +27,12 @@ export struct AboutPage {
   }
 
   build() {
-    Stack({ alignContent: Alignment.Top }) {
+    // HDS 沉浸光感标题栏（对齐参考项目）：内容滚入栏下触发渐变模糊，材质档位跟随「沉浸光感」设置
+    HdsNavigation() {
+      HdsNavDestination() {
+        Stack({ alignContent: Alignment.Top }) {
       // 滚动内容：可滚到固定标题栏下方（标题栏模糊蒙版保证可读性）
-      Scroll() {
+          Scroll(this.scroller) {
         Column({ space: 12 }) {
           // 应用标识头部：图标 + 名称 + 版本
           Column({ space: 8 }) {
@@ -123,7 +132,7 @@ export struct AboutPage {
         .width('100%')
         .justifyContent(FlexAlign.Start)
         .alignItems(HorizontalAlign.Start)
-        .padding({ left: 12, right: 12, top: this.statusBarHeight + 52, bottom: 96 })
+        .padding({ left: 12, right: 12, top: this.statusBarHeight + 60, bottom: 96 })
       }
       .width('100%')
       .height('100%')
@@ -136,18 +145,16 @@ export struct AboutPage {
         return { offsetRemain: offset };
       })
 
-      // 固定标题栏：顶部让出状态栏（不与通知栏重叠），背景模糊
-      Column() {
-        Row() {
-          Text($r('app.string.about_title')).fontSize(18).fontWeight(FontWeight.Bold)
-          Blank()
-        }
-        .width('100%')
-      }
-      .width('100%')
-      .padding({ left: 12, right: 12, top: 12 + this.statusBarHeight, bottom: 10 })
-      .backgroundBlurStyle(BlurStyle.Regular)
     }
+    .width('100%')
+    .height('100%')
+      }
+      .titleBar(buildTitleBar($r('app.string.about_title'), this.glowLevel))
+      .bindToScrollable([this.scroller])
+    }
+    .mode(NavigationMode.Stack)
+    .hideTitleBar(true)
+    .hideToolBar(true)
     .width('100%')
     .height('100%')
   }
