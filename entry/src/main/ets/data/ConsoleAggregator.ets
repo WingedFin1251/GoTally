@@ -261,7 +261,7 @@ export class ConsoleAggregator implements UsageAggregator {
     if (org === '') {
       return null;
     }
-    return this.request(path, org, token);
+    return ConsoleAggregator.request(path, org, token);
   }
 
   /**
@@ -283,7 +283,7 @@ export class ConsoleAggregator implements UsageAggregator {
       ConsoleAggregator.wsCache = m[0];
       return ConsoleAggregator.wsCache;
     }
-    const json = await this.request('/console/api/orgs', '', token);
+    const json = await ConsoleAggregator.request('/console/api/orgs', '', token);
     if (json !== null) {
       const arr = JSON.parse(json) as ConsoleOrgLite[];
       for (const o of arr) {
@@ -297,8 +297,70 @@ export class ConsoleAggregator implements UsageAggregator {
     return '';
   }
 
-  private async request(path: string, orgId: string, token: string): Promise<string | null> {
-    const now = Date.now();
+  /**
+   * 主动把官方 30 天窗口的逐日数据并入本地历史。
+   *
+   * 为什么需要：逐日数据只在「当前浏览的周期」被拉取，若用户只看「今天」，
+   * 历史就攒不到整天。每次刷新（含自动刷新）都调用本方法，保证历史始终尽量完整，
+   * 从而让滑出官方窗口的日期不会丢。
+   */
+  static async captureHistory(token: string): Promise<void> {
+    const t = token.trim();
+    if (t === '') {
+      return;
+    }
+    try {
+      // 该接口无需 x-org-id，可直接发现工作区
+      const orgJson = await ConsoleAggregator.request('/console/api/orgs', '', t);
+      if (orgJson === null) {
+        return;
+      }
+      const orgs = JSON.parse(orgJson) as ConsoleOrgLite[];
+      let org = ConsoleAggregator.wsCache;
+      if (org === '') {
+        for (const o of orgs) {
+          const id = o.id !== undefined ? o.id : '';
+          if (id !== '') {
+            org = id;
+            ConsoleAggregator.wsCache = id;
+            break;
+          }
+        }
+      }
+      if (org === '') {
+        return;
+      }
+      const json = await ConsoleAggregator.request('/console/api/usage/cost-by-day?range=30d', org, t);
+      if (json === null) {
+        return;
+      }
+      const items = JSON.parse(json) as ConsoleDayItem[];
+      const out: DailyStat[] = [];
+      for (const it of items) {
+        const date = it.date !== undefined ? it.date : '';
+        if (date === '') {
+          continue;
+        }
+        out.push({
+          date: date,
+          totalInputTokens: ConsoleAggregator.n(it.totalTokens),
+          uncachedInputTokens: 0,
+          totalReasoningTokens: 0,
+          cacheHitTokens: 0,
+          cacheWriteTokens: 0,
+          totalOutputTokens: 0,
+          totalCostUsd: ConsoleAggregator.n(it.totalCostMicroCents) / 1e8,
+          requestCount: ConsoleAggregator.n(it.totalRequests),
+          hitRate: 0,
+        });
+      }
+      await ConsoleSnapshotStore.appendHistory(out);
+    } catch (e) {
+      console.error('captureHistory failed: ' + (e instanceof Error ? e.message : String(e)));
+    }
+  }
+
+  private static async request(path: string, orgId: string, token: string): Promise<string | null> {    const now = Date.now();
     const at = ConsoleAggregator.cacheAt.get(path);
     if (at !== undefined && now - at < ConsoleAggregator.TTL_MS) {
       const hit = ConsoleAggregator.cache.get(path);

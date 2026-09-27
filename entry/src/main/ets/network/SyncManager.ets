@@ -123,6 +123,8 @@ export class SyncManager {
       if (!token.includes('auth=')) {
         await this.refreshKeyNames(workspaceId, token);
         ConsoleAggregator.invalidate();
+        // 主动把官方 30 天窗口并入本地历史：保证滑出窗口的日期不丢（历史越用越长）
+        await ConsoleAggregator.captureHistory(token);
         await this.store.updateSyncState('ok', '', 0);
         this.progress.inserted = 0;
         this.setPhase('done', '已刷新官方数据');
