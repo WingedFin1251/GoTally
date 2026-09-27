@@ -191,6 +191,10 @@ struct Index {
       this.loggedIn = token.trim() !== '';
       this.hasApiKey = (await SettingsStore.getGoApiKey()).trim() !== '';
       AppStorage.setOrCreate('hasToken', this.loggedIn);
+      // 新登录方式（控制台会话）不再下发 auth cookie，旧的逐条明细接口对其无效：
+      // 记录页据此给出说明，统计/总览仍由控制台聚合接口提供数据。
+      const t = token.trim();
+      AppStorage.setOrCreate('recordsUnavailable', this.loggedIn && t !== '' && !t.includes('auth='));
     } catch (e) {
       console.error('checkLogin failed: ' + (e instanceof Error ? e.message : String(e)));
     } finally {

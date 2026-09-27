@@ -22,6 +22,8 @@ export struct RecordsPage {
   @StorageProp('glowLevel') glowLevel: number = 1;
   /** 是否已登录：未登录即免登录模式，列表无数据，给出来源提示。 */
   @StorageProp('hasToken') hasToken: boolean = false;
+  /** 当前登录方式是否无法读取逐条明细（新控制台会话登录）：给出说明而非空列表。 */
+  @StorageProp('recordsUnavailable') recordsUnavailable: boolean = false;
   /** 页面滚动控制器：绑定给 HDS 标题栏，驱动「内容滚入栏下渐变模糊」。 */
   private scroller: Scroller = new Scroller();
   @Watch('onSyncFinished') @StorageProp('syncFinishedVersion') syncFinishedVersion: number = 0;
@@ -377,6 +379,15 @@ export struct RecordsPage {
             // 免登录模式提示：记录需登录后同步
             if (!this.hasToken) {
               Text($r('app.string.guest_records_hint'))
+                .fontSize(11)
+                .fontColor($r('app.color.text_secondary'))
+                .width('100%')
+                .padding(10)
+                .borderRadius(10)
+                .backgroundColor($r('app.color.divider'))
+            } else if (this.recordsUnavailable) {
+              // 官方已更换鉴权与接口：新登录方式拿不到逐条明细（总览/统计仍由官方聚合接口提供）
+              Text($r('app.string.records_unavailable'))
                 .fontSize(11)
                 .fontColor($r('app.color.text_secondary'))
                 .width('100%')

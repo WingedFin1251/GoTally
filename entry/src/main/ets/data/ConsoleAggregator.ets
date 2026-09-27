@@ -1,0 +1,321 @@
+// entry/src/main/ets/data/ConsoleAggregator.ets
+import { http } from '@kit.NetworkKit';
+import { Constants } from '../common/constants/Constants';
+import { WebCookies } from '../common/utils/WebCookies';
+import type { Totals, ModelStat, DailyStat, TrendPoint, SessionStat, RecordRow, UsageAggregator } from '../model/Stats';
+
+/** 控制台用量通用字段（summary 与 models 条目共用）。 */
+interface ConsoleUsageFields {
+  totalRequests?: string;
+  totalInputTokens?: string;
+  totalOutputTokens?: string;
+  totalCacheReadTokens?: string;
+  totalCacheWrite5mTokens?: string;
+  totalCacheWrite1hTokens?: string;
+  totalCostMicroCents?: string;
+}
+
+/** 控制台 /console/api/usage/summary 响应（字段均为字符串）。 */
+interface ConsoleSummary extends ConsoleUsageFields {
+}
+
+interface ConsoleModelItem extends ConsoleUsageFields {
+  model?: string;
+  provider?: string;
+}
+
+interface ConsoleModelsResponse {
+  items?: ConsoleModelItem[];
+}
+
+/** 控制台 /console/api/usage/cost-by-day 单日。 */
+interface ConsoleDayItem {
+  date?: string;
+  totalCostMicroCents?: string;
+  totalTokens?: string;
+  totalRequests?: string;
+}
+
+/** 控制台 /console/api/orgs 单项（用于发现工作区 ID）。 */
+interface ConsoleOrgLite {
+  id?: string;
+  name?: string;
+}
+
+/**
+ * 控制台聚合数据源（新登录方式下的主数据源）。
+ *
+ * 背景：OpenCode 更换鉴权后，旧的逐请求明细接口（`_server usage.list`）对会话 cookie 已不生效，
+ * 本地因此没有记录；但控制台提供了官方聚合接口，用同一会话 cookie 即可读取（**必须带 `x-org-id`**）：
+ *   GET /console/api/usage/summary        总量
+ *   GET /console/api/usage/models         模型维度
+ *   GET /console/api/usage/cost-by-day    按天
+ * 策略：本地有记录时用本地（明细更全），本地为空时回退到控制台聚合数据。
+ */
+export class ConsoleAggregator implements UsageAggregator {
+  private local: UsageAggregator;
+  private tokenProvider: () => Promise<string>;
+  private wsProvider: () => Promise<string>;
+  private static cache: Map<string, string> = new Map<string, string>();
+  private static cacheAt: Map<string, number> = new Map<string, number>();
+  private static wsCache: string = '';
+  private static readonly TTL_MS: number = 60000;
+
+  constructor(local: UsageAggregator, tokenProvider: () => Promise<string>, wsProvider: () => Promise<string>) {
+    this.local = local;
+    this.tokenProvider = tokenProvider;
+    this.wsProvider = wsProvider;
+  }
+
+  async totals(period: string): Promise<Totals> {
+    const t = await this.local.totals(period);
+    if (t.requestCount > 0) {
+      return t;
+    }
+    const json = await this.getJson(`/console/api/usage/summary${ConsoleAggregator.rangeQuery(period)}`);
+    if (json === null) {
+      return t;
+    }
+    return ConsoleAggregator.mapTotals(JSON.parse(json) as ConsoleSummary);
+  }
+
+  async modelStats(period: string): Promise<ModelStat[]> {
+    const rows = await this.local.modelStats(period);
+    if (rows.length > 0) {
+      return rows;
+    }
+    const json = await this.getJson(`/console/api/usage/models${ConsoleAggregator.rangeQuery(period)}`);
+    if (json === null) {
+      return rows;
+    }
+    const data = JSON.parse(json) as ConsoleModelsResponse;
+    const items = data.items !== undefined ? data.items : [];
+    const out: ModelStat[] = [];
+    for (const it of items) {
+      const model = it.model !== undefined ? it.model : '';
+      if (model === '') {
+        continue;
+      }
+      const base = ConsoleAggregator.mapTotals(it);
+      out.push({
+        model: model,
+        requestCount: base.requestCount,
+        sessionCount: 0,
+        totalInputTokens: base.totalInputTokens,
+        uncachedInputTokens: base.uncachedInputTokens,
+        totalReasoningTokens: 0,
+        cacheHitTokens: base.cacheHitTokens,
+        cacheWriteTokens: base.cacheWriteTokens,
+        totalOutputTokens: base.totalOutputTokens,
+        totalCostUsd: base.totalCostUsd,
+        hitRate: base.hitRate,
+      });
+    }
+    return out;
+  }
+
+  async dailyStats(days: number): Promise<DailyStat[]> {
+    const rows = await this.local.dailyStats(days);
+    if (rows.length > 0) {
+      return rows;
+    }
+    const json = await this.getJson(`/console/api/usage/cost-by-day${ConsoleAggregator.rangeForDays(days)}`);
+    if (json === null) {
+      return rows;
+    }
+    const items = JSON.parse(json) as ConsoleDayItem[];
+    const out: DailyStat[] = [];
+    for (const it of items) {
+      const date = it.date !== undefined ? it.date : '';
+      if (date === '') {
+        continue;
+      }
+      const cost = ConsoleAggregator.n(it.totalCostMicroCents) / 1e8;
+      const tokens = ConsoleAggregator.n(it.totalTokens);
+      out.push({
+        date: date,
+        // 控制台按天只给总量：整块计入输入侧（总 TOKEN 口径一致），费用/请求数精确
+        totalInputTokens: tokens,
+        uncachedInputTokens: 0,
+        totalReasoningTokens: 0,
+        cacheHitTokens: 0,
+        cacheWriteTokens: 0,
+        totalOutputTokens: 0,
+        totalCostUsd: cost,
+        requestCount: ConsoleAggregator.n(it.totalRequests),
+        hitRate: 0,
+      });
+    }
+    return out;
+  }
+
+  /** 控制台无小时级数据，保持本地（本地为空即空图）。 */
+  async todayTrend(): Promise<TrendPoint[]> {
+    return this.local.todayTrend();
+  }
+
+  /** 逐条明细控制台不提供，保留本地（新登录下为空）。 */
+  async sessionStatsPage(page: number, pageSize: number, period: string): Promise<[SessionStat[], number]> {
+    return this.local.sessionStatsPage(page, pageSize, period);
+  }
+
+  async usageRecordsPage(page: number, pageSize: number, model: string | null, period: string): Promise<[RecordRow[], number]> {
+    return this.local.usageRecordsPage(page, pageSize, model, period);
+  }
+
+  async listModels(): Promise<string[]> {
+    return this.local.listModels();
+  }
+
+  // ---- 周期 → 控制台 range 参数 ----
+  private static rangeQuery(period: string): string {
+    if (period === Constants.PERIOD_TODAY) {
+      return '?range=24h';
+    }
+    if (period === '7d') {
+      return '?range=7d';
+    }
+    if (period === '30d') {
+      return '?range=30d';
+    }
+    return '';
+  }
+
+  private static rangeForDays(days: number): string {
+    if (days <= 1) {
+      return '?range=24h';
+    }
+    if (days <= 7) {
+      return '?range=7d';
+    }
+    return '?range=30d';
+  }
+
+  /** 带 TTL 缓存的 JSON 读取（自动补 x-org-id）；未登录或失败返回 null。 */
+  private async getJson(path: string): Promise<string | null> {
+    let token = '';
+    try {
+      token = (await this.tokenProvider()).trim();
+    } catch (e) {
+      token = '';
+    }
+    if (token === '') {
+      return null;
+    }
+    const org = await this.resolveOrgId(token);
+    if (org === '') {
+      return null;
+    }
+    return this.request(path, org, token);
+  }
+
+  /**
+   * 工作区 ID：优先本地已解析的值，缺失时用 `/console/api/orgs`（该接口无需 x-org-id）发现。
+   * 控制台的 usage/go 接口都要求 `x-org-id`，缺了会直接 400。
+   */
+  private async resolveOrgId(token: string): Promise<string> {
+    if (ConsoleAggregator.wsCache !== '') {
+      return ConsoleAggregator.wsCache;
+    }
+    let hint = '';
+    try {
+      hint = (await this.wsProvider()).trim();
+    } catch (e) {
+      hint = '';
+    }
+    const m = /wrk_[A-Za-z0-9]+/.exec(hint);
+    if (m !== null) {
+      ConsoleAggregator.wsCache = m[0];
+      return ConsoleAggregator.wsCache;
+    }
+    const json = await this.request('/console/api/orgs', '', token);
+    if (json !== null) {
+      const arr = JSON.parse(json) as ConsoleOrgLite[];
+      for (const o of arr) {
+        const id = o.id !== undefined ? o.id : '';
+        if (id !== '') {
+          ConsoleAggregator.wsCache = id;
+          return id;
+        }
+      }
+    }
+    return '';
+  }
+
+  private async request(path: string, orgId: string, token: string): Promise<string | null> {
+    const now = Date.now();
+    const at = ConsoleAggregator.cacheAt.get(path);
+    if (at !== undefined && now - at < ConsoleAggregator.TTL_MS) {
+      const hit = ConsoleAggregator.cache.get(path);
+      if (hit !== undefined) {
+        return hit;
+      }
+    }
+    const header: Record<string, string> = {
+      'Cookie': ConsoleAggregator.consoleCookie(token),
+      'Accept': 'application/json',
+      'User-Agent': Constants.USER_AGENT,
+      'Origin': Constants.OPENCODE_ORIGIN,
+      'Referer': `${Constants.OPENCODE_ORIGIN}/console`,
+    };
+    if (orgId !== '') {
+      header['x-org-id'] = orgId;
+    }
+    const req = http.createHttp();
+    try {
+      const resp = await req.request(`${Constants.OPENCODE_ORIGIN}${path}`, {
+        method: http.RequestMethod.GET,
+        header: header,
+        connectTimeout: Constants.REQUEST_TIMEOUT_MS,
+        readTimeout: Constants.REQUEST_TIMEOUT_MS,
+      });
+      req.destroy();
+      if (resp.responseCode !== 200) {
+        console.error(`console api ${path} HTTP ${resp.responseCode}`);
+        return null;
+      }
+      const text = resp.result as string;
+      ConsoleAggregator.cache.set(path, text);
+      ConsoleAggregator.cacheAt.set(path, now);
+      return text;
+    } catch (e) {
+      req.destroy();
+      console.error('console usage fetch failed: ' + (e instanceof Error ? e.message : String(e)));
+      return null;
+    }
+  }
+
+  /** 控制台接口所需 cookie：优先现读控制台会话，退回整串凭据。 */
+  private static consoleCookie(token: string): string {
+    const session = WebCookies.read(Constants.CONSOLE_COOKIE_NAME, Constants.OPENCODE_ORIGIN);
+    if (session !== '') {
+      return `${Constants.CONSOLE_COOKIE_NAME}=${session}`;
+    }
+    return token;
+  }
+
+  private static n(v: string | undefined): number {
+    const x = v !== undefined ? Number(v) : 0;
+    return Number.isNaN(x) ? 0 : x;
+  }
+
+  /** 控制台字段 → 本地口径 Totals（控制台 totalInputTokens 为「未命中输入」）。 */
+  private static mapTotals(s: ConsoleUsageFields): Totals {
+    const uncached = ConsoleAggregator.n(s.totalInputTokens);
+    const cacheRead = ConsoleAggregator.n(s.totalCacheReadTokens);
+    const cacheWrite = ConsoleAggregator.n(s.totalCacheWrite5mTokens) + ConsoleAggregator.n(s.totalCacheWrite1hTokens);
+    const denom = cacheRead + uncached;
+    return {
+      requestCount: ConsoleAggregator.n(s.totalRequests),
+      sessionCount: 0,
+      totalInputTokens: uncached + cacheRead + cacheWrite,
+      uncachedInputTokens: uncached,
+      totalReasoningTokens: 0,
+      cacheHitTokens: cacheRead,
+      cacheWriteTokens: cacheWrite,
+      totalOutputTokens: ConsoleAggregator.n(s.totalOutputTokens),
+      totalCostUsd: ConsoleAggregator.n(s.totalCostMicroCents) / 1e8,
+      hitRate: denom > 0 ? Number(((cacheRead / denom) * 100).toFixed(2)) : 0,
+    };
+  }
+}
