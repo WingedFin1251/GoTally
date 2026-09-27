@@ -13,12 +13,51 @@ struct Login {
   @State loginUrl: string = OpenCodeApi.buildLoginUrl();
   @State loading: boolean = true;
   @State done: boolean = false;
+  @State hint: string = '';
   /** 状态栏高度（vp）：沉浸式布局下用于标题栏顶部避让，避免与系统状态栏重叠。 */
   @State statusBarHeight: number = 0;
   private controller: webview.WebviewController = new webview.WebviewController();
+  /** 最近一次页面地址：cookie 轮询时用于提取工作区 ID。 */
+  private lastUrl: string = OpenCodeApi.buildLoginUrl();
+  private pollTimer: number = -1;
+  private pollCount: number = 0;
 
   aboutToAppear(): void {
     this.resolveStatusBarHeight();
+    this.startPolling();
+  }
+
+  aboutToDisappear(): void {
+    this.stopPolling();
+  }
+
+  /**
+   * 登录成功判定不能只依赖一次 URL 拦截：
+   * 回调页的 `auth` cookie 由响应头 Set-Cookie 写入（而拦截发生在请求发起时，此刻还没有 cookie），
+   * 之后页面又是 SPA 客户端路由跳转（不再触发导航拦截），单靠 onLoadIntercept 会一直抓不到凭据。
+   * 因此改为「拦截时立即尝试 + 定时轮询 cookie」，并提供「我已登录」手动兜底。
+   */
+  private startPolling(): void {
+    if (this.pollTimer !== -1) {
+      return;
+    }
+    this.pollTimer = setInterval(() => {
+      this.pollCount++;
+      this.captureAndFinish(this.lastUrl);
+      if (!this.done && this.pollCount === 6) {
+        this.hint = '若网页已显示登录成功，请点右上角「我已登录」';
+      }
+      if (this.pollCount >= 150) {
+        this.stopPolling();
+      }
+    }, 600);
+  }
+
+  private stopPolling(): void {
+    if (this.pollTimer !== -1) {
+      clearInterval(this.pollTimer);
+      this.pollTimer = -1;
+    }
   }
 
   /**
@@ -36,6 +75,14 @@ struct Login {
       this.statusBarHeight = this.getUIContext().px2vp(sys.topRect.height);
     } catch (e) {
       console.error('resolveStatusBarHeight failed: ' + (e instanceof Error ? e.message : String(e)));
+    }
+  }
+
+  /** 手动兜底：用户确认网页已登录后，再取一次凭据。 */
+  private async manualFinish(): Promise<void> {
+    await this.captureAndFinish(this.lastUrl);
+    if (!this.done) {
+      this.hint = '还没取到登录凭据：请确认网页中已完成登录后重试';
     }
   }
 
@@ -66,6 +113,7 @@ struct Login {
     const m = WORKSPACE_URL_RE.exec(url);
     const workspaceHint = m !== null ? m[1] : 'Default';
     this.done = true;
+    this.stopPolling();
     await DataProvider.getStore().saveToken(`auth=${authValue}`, workspaceHint);
     // 触发首次全量同步（后台）
     DataProvider.getSyncManager().sync('full');
@@ -79,11 +127,15 @@ struct Login {
         Text('GoTally')
           .fontSize(18)
           .fontWeight(FontWeight.Bold)
-          .fontColor($r('app.color.text_primary'))
         Blank()
-        Button('取消')
-          .fontSize(14)
+        Button('我已登录')
+          .fontSize(13)
           .height(30)
+          .onClick(() => this.manualFinish())
+        Button('取消')
+          .fontSize(13)
+          .height(30)
+          .margin({ left: 8 })
           .onClick(() => this.getUIContext().getRouter().back())
       }
       .width('100%')
@@ -98,9 +150,17 @@ struct Login {
           .onPageBegin((event) => {
             this.loading = false;
           })
+          .onPageEnd((event) => {
+            // 记录最新地址（用于提取 wrk_* 工作区），并立即尝试取凭据
+            if (event.url !== '') {
+              this.lastUrl = event.url;
+            }
+            this.captureAndFinish(this.lastUrl);
+          })
           .onLoadIntercept((event) => {
             const url: string = event.data.getRequestUrl();
             if (url.startsWith('https://opencode.ai')) {
+              this.lastUrl = url;
               this.captureAndFinish(url);
             }
             return false;
@@ -114,6 +174,15 @@ struct Login {
       }
       .width('100%')
       .layoutWeight(1)
+
+      if (this.hint !== '') {
+        Text(this.hint)
+          .fontSize(12)
+          .fontColor($r('app.color.text_muted'))
+          .width('100%')
+          .textAlign(TextAlign.Center)
+          .padding({ left: 16, right: 16, bottom: 10 })
+      }
     }
     .width('100%')
     .height('100%')
