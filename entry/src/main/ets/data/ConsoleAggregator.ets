@@ -170,13 +170,29 @@ export class ConsoleAggregator implements UsageAggregator {
         });
       }
       await ConsoleSnapshotStore.saveDaily(key, out);
+      // 并入本地累计历史：官方窗口只有 30 天，滑出窗口的日期靠这里留住
+      await ConsoleSnapshotStore.appendHistory(out);
       ConsoleAggregator.setStale(false);
+      if (days >= 90) {
+        // 「全部」：优先展示本地累计的更长期历史（可能已超过官方 30 天窗口）
+        const hist = await ConsoleSnapshotStore.loadHistory();
+        if (hist.length > out.length) {
+          return hist;
+        }
+      }
       return out;
     }
     const cached = await ConsoleSnapshotStore.loadDaily(key);
     if (cached.length > 0) {
       ConsoleAggregator.setStale(true);
       return cached;
+    }
+    if (days >= 90) {
+      const hist = await ConsoleSnapshotStore.loadHistory();
+      if (hist.length > 0) {
+        ConsoleAggregator.setStale(true);
+        return hist;
+      }
     }
     return rows;
   }

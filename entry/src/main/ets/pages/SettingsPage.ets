@@ -13,6 +13,7 @@ import { pasteboard } from '@kit.BasicServicesKit';
 import { setLanguage } from '../common/utils/Locale';
 import { AppInfo } from '../common/utils/AppInfo';
 import { Updater } from '../common/utils/Updater';
+import { ConsoleSnapshotStore } from '../data/ConsoleSnapshotStore';
 import { HdsNavigation, HdsNavDestination } from '@kit.UIDesignKit';
 import { buildTitleBar } from '../common/utils/NavTitleBar';
 
@@ -39,6 +40,8 @@ export struct SettingsPage {
   @State goApiKeyDraft: string = '';
   /** 当前登录方式是否无逐条明细（新控制台会话登录）：同步按钮改为「立即刷新」。 */
   @StorageProp('recordsUnavailable') recordsUnavailable: boolean = false;
+  /** 本地累计的用量历史天数（官方接口只给 30 天窗口，靠本地按天累积延长）。 */
+  @State historyDays: number = 0;
   /** 上一次 onProgress 上报的阶段，用于捕捉 done/error 完成时刻（仅触发一次 toast/刷新）。 */
   private lastPhase: string = 'idle';
   /** 滚动联动：向下滚隐藏悬浮导航栏、向上滚显示（由 Index 播放 HDS 滚动动画）。 */
@@ -87,15 +90,24 @@ export struct SettingsPage {
   private async load(): Promise<void> {
     this.settings = await SettingsStore.getAll();
     this.goApiKeyDraft = this.settings.goApiKey;
-    const token = await DataProvider.getStore().getToken();
-    this.loggedIn = token.trim() !== '';
+    const token = await DataProvider.getStore().getToken();    this.loggedIn = token.trim() !== '';
     this.workspace = await DataProvider.getStore().getWorkspaceHint();
     this.syncState = await DataProvider.getStore().getSyncState();
+    this.historyDays = await ConsoleSnapshotStore.historyDayCount();
+  }
+
+  /** 本地历史累计描述：官方接口只提供 30 天窗口，超出部分靠本地按天累积。 */
+  private historyDesc(): string {
+    if (this.historyDays > 0) {
+      return this.str($r('app.string.history_desc').id, `${this.historyDays}`);
+    }
+    return this.str($r('app.string.history_none').id, '');
   }
 
   /** 同步完成/失败收尾：刷新同步状态并弹提示，页面无需重启即可看到最新「最近同步 / 记录总数」。 */
   private async onSyncFinished(p: SyncProgress): Promise<void> {
     this.syncProgressMsg = '';
+    this.historyDays = await ConsoleSnapshotStore.historyDayCount();
     try {
       this.syncState = await DataProvider.getStore().getSyncState();
     } catch (e) {
@@ -281,6 +293,7 @@ export struct SettingsPage {
         SettingsCard({ title: $r('app.string.set_data') }) {
           SettingRow({ title: $r('app.string.data_dir'), desc: Constants.DB_NAME }) {}
           SettingRow({ title: $r('app.string.sync_info'), desc: this.syncInfoDesc() }) {}
+          SettingRow({ title: $r('app.string.history_days'), desc: this.historyDesc() }) {}
         }
 
         // 数据源（可选）

@@ -103,6 +103,14 @@ const SCHEMA_STATEMENTS: string[] = [
      limit_usd REAL NOT NULL DEFAULT -1,
      updated_at TEXT NOT NULL
    );`,
+  // 本地累计历史：官方只给到 30 天，这里按「日期」唯一累积，越用越长（只 upsert，不随窗口滑动删除）
+  `CREATE TABLE IF NOT EXISTS console_history (
+     date TEXT PRIMARY KEY,
+     tokens INTEGER NOT NULL DEFAULT 0,
+     cost_usd REAL NOT NULL DEFAULT 0,
+     request_count INTEGER NOT NULL DEFAULT 0,
+     updated_at TEXT NOT NULL
+   );`,
 ];
 
 /** RDB 单例：建库建表，初始化单行表。getStore 单飞（并发首次调用共享同一次初始化），避免竞争抛错。 */
