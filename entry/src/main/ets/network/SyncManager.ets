@@ -36,6 +36,8 @@ export class SyncManager {
   private resolveWorkspace: ((hint: string, token: string) => Promise<string>) | null;
   /** 可选的 Key 名称拉取器（同步收尾时刷新 key_id → 名称缓存）。 */
   private keyNameFetcher: ((workspaceId: string, token: string) => Promise<KeyNamePair[]>) | null;
+  /** 最近一次「启动即刷新」的时间戳：避免页面频繁 onPageShow 造成重复刷新。 */
+  private lastAutoKickMs: number = 0;
   onProgress: (p: SyncProgress) => void = () => {};
   /** 同步终止回调（成功/部分成功/失败均触发，且无论哪个页面在前台）：供应用外壳统一广播「数据已变更」。 */
   onFinished: (result: SyncResult) => void = () => {};
@@ -235,6 +237,13 @@ export class SyncManager {
   async startAutoSyncLoop(): Promise<void> {
     this.stopAutoSync();
     const intervalSec = await this.intervalProvider();
+    // 启动即刷新一次（60 秒内不重复）：否则只在定时器到点才刷新，
+    // 用户开应用不到一个间隔就退出时，当天的数据（及官方 30 天窗口历史）就抓不到。
+    const now = Date.now();
+    if (!this.busy && now - this.lastAutoKickMs > 60000) {
+      this.lastAutoKickMs = now;
+      this.sync('incremental');
+    }
     this.timer = setInterval(() => {
       if (this.busy) {
         return;
