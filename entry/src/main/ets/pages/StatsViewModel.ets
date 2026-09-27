@@ -1,5 +1,6 @@
 // entry/src/main/ets/pages/StatsViewModel.ets
 import { DataProvider } from '../data/DataProvider';
+import { ConsoleAggregator } from '../data/ConsoleAggregator';
 import type { Totals, ModelStat, DailyStat, TrendPoint } from '../model/Stats';
 import { Constants } from '../common/constants/Constants';
 
@@ -30,12 +31,19 @@ export class StatsViewModel {
     // 各项独立 try/catch：单项失败保留旧值并记日志，不让一次失败中断整页刷新
     // （否则饼图/趋势图会停留在上一次 period 的数据，造成「今天」显示亿级旧数据）。
     try {
-      this.totals = await agg.totals(period);
+      const t = await agg.totals(period);
+      // 网络失败（数据来自缓存/快照）且已有数值时保留旧值，避免界面突然闪 0
+      if (!ConsoleAggregator.isStale() || this.totals.requestCount === 0) {
+        this.totals = t;
+      }
     } catch (e) {
       console.error('load totals failed: ' + (e instanceof Error ? e.message : String(e)));
     }
     try {
-      this.models = await agg.modelStats(period);
+      const ms = await agg.modelStats(period);
+      if (!ConsoleAggregator.isStale() || this.models.length === 0) {
+        this.models = ms;
+      }
     } catch (e) {
       console.error('load modelStats failed: ' + (e instanceof Error ? e.message : String(e)));
     }
@@ -51,7 +59,10 @@ export class StatsViewModel {
       this.todayTrend = [];
       const days = period === '7d' ? 7 : (period === '30d' ? 30 : 90);
       try {
-        this.daily30 = await agg.dailyStats(days);
+        const ds = await agg.dailyStats(days);
+        if (!ConsoleAggregator.isStale() || this.daily30.length === 0) {
+          this.daily30 = ds;
+        }
       } catch (e) {
         console.error('load dailyStats failed: ' + (e instanceof Error ? e.message : String(e)));
       }

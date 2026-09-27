@@ -5,6 +5,7 @@ import type { QuotaWindow } from '../model/UsageRecord';
 import { Constants } from '../common/constants/Constants';
 import { OpenCodeApi } from '../network/OpenCodeApi';
 import { SettingsStore } from '../data/SettingsStore';
+import { ConsoleAggregator } from '../data/ConsoleAggregator';
 
 /** 首页数据加载与周期切换（无 UI 依赖，便于单测）。 */
 export class DashboardViewModel {
@@ -26,10 +27,16 @@ export class DashboardViewModel {
   async load(): Promise<void> {
     this.loading = true;
     const store = DataProvider.getAggregator();
-    this.totals = await store.totals(this.period);
+    const t = await store.totals(this.period);
+    if (!ConsoleAggregator.isStale() || this.totals.requestCount === 0) {
+      this.totals = t;
+    }
     this.todayTotals = await store.totals(Constants.PERIOD_TODAY);
     this.trend = await store.todayTrend();
-    this.daily = await store.dailyStats(7);
+    const d = await store.dailyStats(7);
+    if (!ConsoleAggregator.isStale() || this.daily.length === 0) {
+      this.daily = d;
+    }
     this.quota = await this.loadQuota();
     this.loading = false;
     this.loaded = true;

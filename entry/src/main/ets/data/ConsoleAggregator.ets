@@ -62,6 +62,8 @@ export class ConsoleAggregator implements UsageAggregator {
   private static cache: Map<string, string> = new Map<string, string>();
   private static cacheAt: Map<string, number> = new Map<string, number>();
   private static wsCache: string = '';
+  /** 最近一次请求是否只能拿到「过期缓存/快照」（网络失败时为 true）。 */
+  private static lastStale: boolean = false;
   private static readonly TTL_MS: number = 60000;
 
   constructor(local: UsageAggregator, tokenProvider: () => Promise<string>, wsProvider: () => Promise<string>) {
@@ -213,6 +215,11 @@ export class ConsoleAggregator implements UsageAggregator {
     if (AppStorage.get<boolean>('consoleStale') !== stale) {
       AppStorage.setOrCreate('consoleStale', stale);
     }
+  }
+
+  /** 最近一次聚合数据是否来自缓存/快照（供界面决定「失败时保留上次数值」）。 */
+  static isStale(): boolean {
+    return ConsoleAggregator.lastStale;
   }
 
   /** 控制台无小时级数据，保持本地（本地为空即空图）。 */
@@ -462,6 +469,7 @@ export class ConsoleAggregator implements UsageAggregator {
           const text = resp.result as string;
           ConsoleAggregator.cache.set(path, text);
           ConsoleAggregator.cacheAt.set(path, now);
+          ConsoleAggregator.lastStale = false;
           return text;
         }
         lastErr = `HTTP ${resp.responseCode}`;
@@ -474,6 +482,14 @@ export class ConsoleAggregator implements UsageAggregator {
       }
     }
     console.error(`console api failed [${path}] org=${orgId === '' ? 'none' : 'set'} ${lastErr}`);
+    // 网络失败时，先用「过期缓存」顶上（避免界面闪 0），并标记为陈旧
+    const stale = ConsoleAggregator.cache.get(path);
+    if (stale !== undefined) {
+      ConsoleAggregator.lastStale = true;
+      ConsoleAggregator.setStale(true);
+      return stale;
+    }
+    ConsoleAggregator.lastStale = true;
     return null;
   }
 
