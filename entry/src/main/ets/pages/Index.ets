@@ -11,11 +11,55 @@ import { RecordsPage } from './RecordsPage';
 import { SettingsPage } from './SettingsPage';
 import { AboutPage } from './AboutPage';
 
+/** 免登录模式弹窗：输入 OpenCode Go API Key（仅配额可用）。 */
+@CustomDialog
+struct ApiKeyDialog {
+  controller?: CustomDialogController;
+  private keyDraft: string = '';
+  onConfirm: (key: string) => void = () => {};
+
+  build() {
+    Column({ space: 12 }) {
+      Text($r('app.string.guest_title')).fontSize(16).fontWeight(FontWeight.Bold)
+      Text($r('app.string.guest_desc'))
+        .fontSize(12)
+        .fontColor($r('app.color.text_muted'))
+      TextInput({ placeholder: $r('app.string.go_api_key_ph') })
+        .type(InputType.Password)
+        .fontSize(13)
+        .height(40)
+        .onChange((v: string) => { this.keyDraft = v; })
+      Row({ space: 10 }) {
+        Button($r('app.string.cancel'))
+          .layoutWeight(1)
+          .fontSize(14)
+          .height(38)
+          .backgroundColor($r('app.color.divider'))
+          .fontColor($r('app.color.text_primary'))
+          .onClick(() => { this.controller?.close(); })
+        Button($r('app.string.ok'))
+          .layoutWeight(1)
+          .fontSize(14)
+          .height(38)
+          .onClick(() => {
+            this.controller?.close();
+            this.onConfirm(this.keyDraft);
+          })
+      }
+      .width('100%')
+    }
+    .padding(20)
+    .width('100%')
+  }
+}
+
 @Entry
 @Component
 struct Index {
   @State currentTab: number = 0;
   @State loggedIn: boolean = false;
+  /** 是否已配置 OpenCode Go API Key（免登录模式：仅凭 Key 也可进入主界面看配额）。 */
+  @State hasApiKey: boolean = false;
   /** 登录态是否已判定：未判定前渲染中性占位（与系统闪屏一致），避免冷启动闪现欢迎页/登录页。 */
   @State authChecked: boolean = false;
   @State navIndicatorHeight: number = 0;
@@ -24,14 +68,18 @@ struct Index {
   @Watch('applyAutoSync') @StorageLink('autoSyncChanged') autoSyncVersion: number = 0;
   @Watch('onLogout') @StorageLink('logoutVersion') logoutVersion: number = 0;
   private tabsController: HdsTabsController = new HdsTabsController();
+  /** 免登录模式：输入 API Key 的弹窗。 */
+  private apiKeyDialog: CustomDialogController = new CustomDialogController({
+    builder: ApiKeyDialog({
+      onConfirm: (key: string) => { this.enterGuestMode(key); },
+    }),
+    autoCancel: true,
+  });
 
   aboutToAppear(): void {
     // 外壳已在 loadContent 前预读登录态（启动闪屏期间完成）：首帧直接采用，
     // 不再先用 loggedIn=false 渲染欢迎页，从而消除「闪一下登录界面」。
-    if (AppStorage.get<boolean>('authPreloaded') === true) {
-      this.loggedIn = AppStorage.get<boolean>('hasToken') ?? false;
-      this.authChecked = true;
-    }
+    this.initAuthState();
     this.initLocale();
     this.checkLogin();
     this.applyAutoSync();
@@ -87,10 +135,64 @@ struct Index {
     }
   }
 
+  /**
+   * 进入主界面的条件：已登录（有 token）**或**已配置 API Key（免登录模式，仅配额可用）。
+   * 两者都读完后才置 authChecked，避免冷启动先闪欢迎页再跳主界面。
+   */
+  private async initAuthState(): Promise<void> {
+    if (AppStorage.get<boolean>('authPreloaded') === true) {
+      this.loggedIn = AppStorage.get<boolean>('hasToken') ?? false;
+    }
+    try {
+      this.hasApiKey = (await SettingsStore.getGoApiKey()).trim() !== '';
+    } catch (e) {
+      this.hasApiKey = false;
+    }
+    this.authChecked = true;
+  }
+
+  /** 免登录模式入口：保存 API Key 后直接进主界面（配额走官方接口，无需 cookie）。 */
+  private async enterGuestMode(apiKey: string): Promise<void> {
+    const key = apiKey.trim();
+    if (key === '') {
+      this.toastSafe(this.resText($r('app.string.guest_key_required')));
+      return;
+    }
+    try {
+      const s = await SettingsStore.getAll();
+      s.goApiKey = key;
+      await SettingsStore.save(s);
+      this.hasApiKey = true;
+      this.authChecked = true;
+    } catch (e) {
+      console.error('enterGuestMode failed: ' + (e instanceof Error ? e.message : String(e)));
+      this.toastSafe(this.resText($r('app.string.guest_save_failed')));
+    }
+  }
+
+  private resText(res: Resource): string {
+    try {
+      const ctx = this.getUIContext().getHostContext();
+      return ctx !== undefined ? ctx.resourceManager.getStringSync(res.id) : '';
+    } catch (e) {
+      return '';
+    }
+  }
+
+  private toastSafe(msg: string): void {
+    try {
+      this.getUIContext().getPromptAction().showToast({ message: msg });
+    } catch (e) {
+      console.error('toast failed: ' + (e instanceof Error ? e.message : String(e)));
+    }
+  }
+
   private async checkLogin(): Promise<void> {
     try {
       const token = await DataProvider.getStore().getToken();
       this.loggedIn = token.trim() !== '';
+      this.hasApiKey = (await SettingsStore.getGoApiKey()).trim() !== '';
+      AppStorage.setOrCreate('hasToken', this.loggedIn);
     } catch (e) {
       console.error('checkLogin failed: ' + (e instanceof Error ? e.message : String(e)));
     } finally {
@@ -166,6 +268,17 @@ struct Index {
         .onClick(() => {
           this.getUIContext().getRouter().pushUrl({ url: 'pages/Login' });
         })
+
+      // 免登录模式：只填 API Key 即可查看配额（记录/统计需登录后同步）
+      Button($r('app.string.guest_btn'))
+        .fontSize(14)
+        .width(200)
+        .height(40)
+        .backgroundColor($r('app.color.divider'))
+        .fontColor($r('app.color.text_primary'))
+        .onClick(() => {
+          this.apiKeyDialog.open();
+        })
     }
     .width('100%')
     .height('100%')
@@ -215,7 +328,7 @@ struct Index {
   build() {
     if (!this.authChecked) {
       this.SplashPlaceholder();
-    } else if (!this.loggedIn) {
+    } else if (!this.loggedIn && !this.hasApiKey) {
       this.WelcomePage();
     } else {
       HdsTabs({

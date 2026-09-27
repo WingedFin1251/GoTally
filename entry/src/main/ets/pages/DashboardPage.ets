@@ -24,6 +24,8 @@ export struct DashboardPage {
   @StorageProp('navIndicatorHeight') navIndicatorHeight: number = 0;
   /** 沉浸光感档位：响应式依赖，改设置后标题栏材质即时更新。 */
   @StorageProp('glowLevel') glowLevel: number = 1;
+  /** 是否已登录：未登录即免登录模式（仅配额可用），用于顶部提示。 */
+  @StorageProp('hasToken') hasToken: boolean = false;
   /** 页面滚动控制器：绑定给 HDS 标题栏，驱动「内容滚入栏下渐变模糊」。 */
   private scroller: Scroller = new Scroller();
   @Watch('onSyncFinished') @StorageProp('syncFinishedVersion') syncFinishedVersion: number = 0;
@@ -226,6 +228,17 @@ export struct DashboardPage {
               onPick: (p: string) => { this.onPickPeriod(p); },
             })
               .width('100%')
+
+            // 免登录模式提示：只配了 API Key 时，记录/统计无数据
+            if (!this.hasToken) {
+              Text($r('app.string.guest_banner'))
+                .fontSize(11)
+                .fontColor($r('app.color.text_secondary'))
+                .width('100%')
+                .padding(10)
+                .borderRadius(10)
+                .backgroundColor($r('app.color.divider'))
+            }
 
             this.QuotaRow()
             this.OverviewGrid()

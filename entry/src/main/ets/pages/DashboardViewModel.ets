@@ -37,8 +37,10 @@ export class DashboardViewModel {
 
   private async loadQuota(): Promise<QuotaWindow[]> {
     const token = await DataProvider.getStore().getToken();
-    if (token.trim() === '' || Constants.USE_MOCK_DATA) {
-      // Mock 或未登录：返回模拟配额窗口
+    // 可选 API Key：填写后配额优先走官方 /zen/go/v1/usage，其次控制台 JSON，最后页面解析
+    const apiKey = await SettingsStore.getGoApiKey();
+    // 免登录模式（无 token 但有 API Key）也走真实配额，不能回退成示例数据
+    if (Constants.USE_MOCK_DATA || (token.trim() === '' && apiKey.trim() === '')) {
       this.quotaSource = 'mock';
       return [
         { label: '5h', used: 42.5, remaining: 57.5, total: 100, unit: '%', resetAt: '', resetInSec: 3720 },
@@ -47,8 +49,6 @@ export class DashboardViewModel {
       ];
     }
     const hint = await DataProvider.getStore().getWorkspaceHint();
-    // 可选 API Key：填写后配额优先走官方 /zen/go/v1/usage，其次控制台 JSON，最后页面解析
-    const apiKey = await SettingsStore.getGoApiKey();
     const result = await OpenCodeApi.fetchQuota(token, hint, apiKey);
     this.quotaSource = result.success ? (result.source !== undefined ? result.source : '') : '';
     return result.success ? result.windows : [];

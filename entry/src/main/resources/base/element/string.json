@@ -170,6 +170,13 @@
     { "name": "welcome_feat_2", "value": "Token 全维度统计与 24 小时趋势" },
     { "name": "welcome_feat_3", "value": "数据仅保存在本机，安全私密" },
     { "name": "login_btn", "value": "立即登录" },
+    { "name": "guest_btn", "value": "免登录使用（API Key）" },
+    { "name": "guest_title", "value": "免登录模式" },
+    { "name": "guest_desc", "value": "填入 OpenCode Go API Key 即可查看配额（5小时 / 每周 / 每月）。用量记录与统计需要登录后才能同步。" },
+    { "name": "guest_key_required", "value": "请先填写 API Key" },
+    { "name": "guest_save_failed", "value": "保存失败，请重试" },
+    { "name": "guest_banner", "value": "免登录模式 · 仅显示配额；登录后可查看用量记录与统计" },
+    { "name": "guest_records_hint", "value": "免登录模式 · 登录后可同步使用记录与统计" },
     { "name": "login_note", "value": "点击后将打开 OpenCode Go 官方授权页完成登录。" },
 
     { "name": "sync_idle", "value": "待同步" },
