@@ -1,5 +1,6 @@
 // entry/src/main/ets/data/ConsoleAggregator.ets
 import { http } from '@kit.NetworkKit';
+import { BusinessError } from '@kit.BasicServicesKit';
 import { Constants } from '../common/constants/Constants';
 import { WebCookies } from '../common/utils/WebCookies';
 import type { Totals, ModelStat, DailyStat, TrendPoint, SessionStat, RecordRow, UsageAggregator } from '../model/Stats';
@@ -261,28 +262,51 @@ export class ConsoleAggregator implements UsageAggregator {
     if (orgId !== '') {
       header['x-org-id'] = orgId;
     }
-    const req = http.createHttp();
-    try {
-      const resp = await req.request(`${Constants.OPENCODE_ORIGIN}${path}`, {
-        method: http.RequestMethod.GET,
-        header: header,
-        connectTimeout: Constants.REQUEST_TIMEOUT_MS,
-        readTimeout: Constants.REQUEST_TIMEOUT_MS,
-      });
-      req.destroy();
-      if (resp.responseCode !== 200) {
-        console.error(`console api ${path} HTTP ${resp.responseCode}`);
-        return null;
+    // 统计页会并发拉取 summary/models/cost-by-day，实测偶发单条失败（BusinessError）：
+    // 失败重试一次，避免一条抖动导致整块指标为 0。
+    let lastErr = '';
+    for (let attempt = 0; attempt < 2; attempt++) {
+      const req = http.createHttp();
+      try {
+        const resp = await req.request(`${Constants.OPENCODE_ORIGIN}${path}`, {
+          method: http.RequestMethod.GET,
+          header: header,
+          connectTimeout: Constants.REQUEST_TIMEOUT_MS,
+          readTimeout: Constants.REQUEST_TIMEOUT_MS,
+        });
+        req.destroy();
+        if (resp.responseCode === 200) {
+          const text = resp.result as string;
+          ConsoleAggregator.cache.set(path, text);
+          ConsoleAggregator.cacheAt.set(path, now);
+          return text;
+        }
+        lastErr = `HTTP ${resp.responseCode}`;
+      } catch (e) {
+        req.destroy();
+        lastErr = ConsoleAggregator.errText(e);
       }
-      const text = resp.result as string;
-      ConsoleAggregator.cache.set(path, text);
-      ConsoleAggregator.cacheAt.set(path, now);
-      return text;
-    } catch (e) {
-      req.destroy();
-      console.error('console usage fetch failed: ' + (e instanceof Error ? e.message : String(e)));
-      return null;
+      if (attempt === 0) {
+        await ConsoleAggregator.sleep(400);
+      }
     }
+    console.error(`console api failed [${path}] org=${orgId === '' ? 'none' : 'set'} ${lastErr}`);
+    return null;
+  }
+
+  /** BusinessError 不是 Error 实例，直接 String() 会得到 [object Object]，这里取出 code/message。 */
+  private static errText(e: Object): string {
+    const be = e as BusinessError;
+    if (be !== undefined && be.code !== undefined) {
+      return `code=${be.code} msg=${be.message}`;
+    }
+    return e instanceof Error ? e.message : String(e);
+  }
+
+  private static sleep(ms: number): Promise<void> {
+    return new Promise<void>((resolve: () => void) => {
+      setTimeout(resolve, ms);
+    });
   }
 
   /** 控制台接口所需 cookie：优先现读控制台会话，退回整串凭据。 */
