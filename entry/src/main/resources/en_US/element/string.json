@@ -167,6 +167,7 @@
     { "name": "refresh_official_desc", "value": "No per-request details with this sign-in method; tap to refresh official quota and stats" },
     { "name": "refresh_now", "value": "Refresh Now" },
     { "name": "refreshed_official", "value": "Official data refreshed" },
+    { "name": "stale_snapshot", "value": "Offline snapshot · network unavailable, showing the last official data (tap Refresh Now to retry)" },
     { "name": "login_note", "value": "You will be taken to the official OpenCode Go auth page." },
     { "name": "sync_idle", "value": "Idle" },
     { "name": "sync_done", "value": "Synced, {0} new" },

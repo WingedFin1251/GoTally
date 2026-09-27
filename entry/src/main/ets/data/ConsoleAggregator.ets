@@ -3,6 +3,7 @@ import { http } from '@kit.NetworkKit';
 import { BusinessError } from '@kit.BasicServicesKit';
 import { Constants } from '../common/constants/Constants';
 import { WebCookies } from '../common/utils/WebCookies';
+import { ConsoleSnapshotStore } from './ConsoleSnapshotStore';
 import type { Totals, ModelStat, DailyStat, TrendPoint, SessionStat, RecordRow, UsageAggregator } from '../model/Stats';
 
 /** 控制台用量通用字段（summary 与 models 条目共用）。 */
@@ -79,11 +80,21 @@ export class ConsoleAggregator implements UsageAggregator {
     if (t.requestCount > 0) {
       return t;
     }
+    const key = `t:${period}`;
     const json = await this.getJson(`/console/api/usage/summary${ConsoleAggregator.rangeQuery(period)}`);
-    if (json === null) {
-      return t;
+    if (json !== null) {
+      const mapped = ConsoleAggregator.mapTotals(JSON.parse(json) as ConsoleSummary);
+      await ConsoleSnapshotStore.saveTotals(key, mapped);
+      ConsoleAggregator.setStale(false);
+      return mapped;
     }
-    return ConsoleAggregator.mapTotals(JSON.parse(json) as ConsoleSummary);
+    // 网络不可用：回退到本地快照（离线可看上次的官方数据）
+    const cached = await ConsoleSnapshotStore.loadTotals(key);
+    if (cached !== null) {
+      ConsoleAggregator.setStale(true);
+      return cached;
+    }
+    return t;
   }
 
   async modelStats(period: string): Promise<ModelStat[]> {
@@ -91,34 +102,42 @@ export class ConsoleAggregator implements UsageAggregator {
     if (rows.length > 0) {
       return rows;
     }
+    const key = `m:${period}`;
     const json = await this.getJson(`/console/api/usage/models${ConsoleAggregator.rangeQuery(period)}`);
-    if (json === null) {
-      return rows;
-    }
-    const data = JSON.parse(json) as ConsoleModelsResponse;
-    const items = data.items !== undefined ? data.items : [];
-    const out: ModelStat[] = [];
-    for (const it of items) {
-      const model = it.model !== undefined ? it.model : '';
-      if (model === '') {
-        continue;
+    if (json !== null) {
+      const data = JSON.parse(json) as ConsoleModelsResponse;
+      const items = data.items !== undefined ? data.items : [];
+      const out: ModelStat[] = [];
+      for (const it of items) {
+        const model = it.model !== undefined ? it.model : '';
+        if (model === '') {
+          continue;
+        }
+        const base = ConsoleAggregator.mapTotals(it);
+        out.push({
+          model: model,
+          requestCount: base.requestCount,
+          sessionCount: 0,
+          totalInputTokens: base.totalInputTokens,
+          uncachedInputTokens: base.uncachedInputTokens,
+          totalReasoningTokens: 0,
+          cacheHitTokens: base.cacheHitTokens,
+          cacheWriteTokens: base.cacheWriteTokens,
+          totalOutputTokens: base.totalOutputTokens,
+          totalCostUsd: base.totalCostUsd,
+          hitRate: base.hitRate,
+        });
       }
-      const base = ConsoleAggregator.mapTotals(it);
-      out.push({
-        model: model,
-        requestCount: base.requestCount,
-        sessionCount: 0,
-        totalInputTokens: base.totalInputTokens,
-        uncachedInputTokens: base.uncachedInputTokens,
-        totalReasoningTokens: 0,
-        cacheHitTokens: base.cacheHitTokens,
-        cacheWriteTokens: base.cacheWriteTokens,
-        totalOutputTokens: base.totalOutputTokens,
-        totalCostUsd: base.totalCostUsd,
-        hitRate: base.hitRate,
-      });
+      await ConsoleSnapshotStore.saveModels(key, out);
+      ConsoleAggregator.setStale(false);
+      return out;
     }
-    return out;
+    const cached = await ConsoleSnapshotStore.loadModels(key);
+    if (cached.length > 0) {
+      ConsoleAggregator.setStale(true);
+      return cached;
+    }
+    return rows;
   }
 
   async dailyStats(days: number): Promise<DailyStat[]> {
@@ -126,34 +145,47 @@ export class ConsoleAggregator implements UsageAggregator {
     if (rows.length > 0) {
       return rows;
     }
+    const key = `d:${days}`;
     const json = await this.getJson(`/console/api/usage/cost-by-day${ConsoleAggregator.rangeForDays(days)}`);
-    if (json === null) {
-      return rows;
-    }
-    const items = JSON.parse(json) as ConsoleDayItem[];
-    const out: DailyStat[] = [];
-    for (const it of items) {
-      const date = it.date !== undefined ? it.date : '';
-      if (date === '') {
-        continue;
+    if (json !== null) {
+      const items = JSON.parse(json) as ConsoleDayItem[];
+      const out: DailyStat[] = [];
+      for (const it of items) {
+        const date = it.date !== undefined ? it.date : '';
+        if (date === '') {
+          continue;
+        }
+        out.push({
+          date: date,
+          // 控制台按天只给总量：整块计入输入侧（总 TOKEN 口径一致），费用/请求数精确
+          totalInputTokens: ConsoleAggregator.n(it.totalTokens),
+          uncachedInputTokens: 0,
+          totalReasoningTokens: 0,
+          cacheHitTokens: 0,
+          cacheWriteTokens: 0,
+          totalOutputTokens: 0,
+          totalCostUsd: ConsoleAggregator.n(it.totalCostMicroCents) / 1e8,
+          requestCount: ConsoleAggregator.n(it.totalRequests),
+          hitRate: 0,
+        });
       }
-      const cost = ConsoleAggregator.n(it.totalCostMicroCents) / 1e8;
-      const tokens = ConsoleAggregator.n(it.totalTokens);
-      out.push({
-        date: date,
-        // 控制台按天只给总量：整块计入输入侧（总 TOKEN 口径一致），费用/请求数精确
-        totalInputTokens: tokens,
-        uncachedInputTokens: 0,
-        totalReasoningTokens: 0,
-        cacheHitTokens: 0,
-        cacheWriteTokens: 0,
-        totalOutputTokens: 0,
-        totalCostUsd: cost,
-        requestCount: ConsoleAggregator.n(it.totalRequests),
-        hitRate: 0,
-      });
+      await ConsoleSnapshotStore.saveDaily(key, out);
+      ConsoleAggregator.setStale(false);
+      return out;
     }
-    return out;
+    const cached = await ConsoleSnapshotStore.loadDaily(key);
+    if (cached.length > 0) {
+      ConsoleAggregator.setStale(true);
+      return cached;
+    }
+    return rows;
+  }
+
+  /** 离线快照标志：界面据此提示「离线快照」。仅在状态变化时写，避免无谓刷新。 */
+  private static setStale(stale: boolean): void {
+    if (AppStorage.get<boolean>('consoleStale') !== stale) {
+      AppStorage.setOrCreate('consoleStale', stale);
+    }
   }
 
   /** 控制台无小时级数据，保持本地（本地为空即空图）。 */

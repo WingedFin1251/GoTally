@@ -182,6 +182,7 @@
     { "name": "refresh_official_desc", "value": "当前登录方式无逐条明细：点按刷新官方配额与统计数据" },
     { "name": "refresh_now", "value": "立即刷新" },
     { "name": "refreshed_official", "value": "已刷新官方数据" },
+    { "name": "stale_snapshot", "value": "离线快照 · 网络不可用，显示上次获取的官方数据（可下拉或点「立即刷新」重试）" },
     { "name": "login_note", "value": "点击后将打开 OpenCode Go 官方授权页完成登录。" },
 
     { "name": "sync_idle", "value": "待同步" },

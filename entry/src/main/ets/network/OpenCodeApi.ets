@@ -2,6 +2,7 @@
 import { http } from '@kit.NetworkKit';
 import { Constants } from '../common/constants/Constants';
 import { WebCookies } from '../common/utils/WebCookies';
+import { ConsoleSnapshotStore } from '../data/ConsoleSnapshotStore';
 import type { QuotaWindow, QuotaResult, UsageRecord, WorkspaceRef } from '../model/UsageRecord';
 import type { KeyNamePair } from '../model/Stats';
 
@@ -352,6 +353,7 @@ export class OpenCodeApi {
       try {
         const windows = await OpenCodeApi.fetchQuotaOfficial(goApiKey);
         if (windows.length > 0) {
+          await ConsoleSnapshotStore.saveQuota(windows);
           return {
             name: 'Default', workspaceId: hint, success: true, updatedAt: updatedAt,
             windows: windows, error: '', source: 'official',
@@ -382,6 +384,7 @@ export class OpenCodeApi {
       const consoleCookie = OpenCodeApi.consoleCookie(token);
       const windows = await OpenCodeApi.fetchQuotaConsole(consoleCookie, workspaceId);
       if (windows.length > 0) {
+        await ConsoleSnapshotStore.saveQuota(windows);
         return {
           name: 'Default', workspaceId: workspaceId, success: true, updatedAt: updatedAt,
           windows: windows, error: '', source: 'console',
@@ -401,17 +404,27 @@ export class OpenCodeApi {
       if (windows.length === 0) {
         throw new Error('无法从 Dashboard HTML 解析额度数据');
       }
+      await ConsoleSnapshotStore.saveQuota(windows);
       return {
         name: 'Default', workspaceId: workspaceId, success: true, updatedAt: updatedAt,
         windows: windows, error: '', source: 'html',
       };
     } catch (e) {
       errors.push('页面解析: ' + (e instanceof Error ? e.message : String(e)));
+    }
+
+    // ④ 全部数据源失败：回退本地快照（离线也能看到上次的配额与金额）
+    const cached = await ConsoleSnapshotStore.loadQuota();
+    if (cached.length > 0) {
       return {
-        name: 'Default', workspaceId: workspaceId, success: false, updatedAt: updatedAt, windows: [],
-        error: errors.join('；'), source: '',
+        name: 'Default', workspaceId: workspaceId, success: true, updatedAt: updatedAt,
+        windows: cached, error: errors.join('；'), source: 'snapshot',
       };
     }
+    return {
+      name: 'Default', workspaceId: workspaceId, success: false, updatedAt: updatedAt, windows: [],
+      error: errors.join('；'), source: '',
+    };
   }
 
   /** 官方用量接口：`GET /zen/go/v1/usage` + `Authorization: Bearer <API Key>`。 */

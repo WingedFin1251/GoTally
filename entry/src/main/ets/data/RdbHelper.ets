@@ -56,6 +56,53 @@ const SCHEMA_STATEMENTS: string[] = [
      name TEXT NOT NULL,
      updated_at TEXT NOT NULL
    );`,
+  // ---- 官方聚合数据本地快照（离线可看；主键/复合主键天然去重，同一份数据不会存多份）----
+  `CREATE TABLE IF NOT EXISTS console_totals (
+     range_key TEXT PRIMARY KEY,
+     request_count INTEGER NOT NULL DEFAULT 0,
+     uncached_input INTEGER NOT NULL DEFAULT 0,
+     output_tokens INTEGER NOT NULL DEFAULT 0,
+     cache_read INTEGER NOT NULL DEFAULT 0,
+     cache_write INTEGER NOT NULL DEFAULT 0,
+     reasoning INTEGER NOT NULL DEFAULT 0,
+     cost_usd REAL NOT NULL DEFAULT 0,
+     hit_rate REAL NOT NULL DEFAULT 0,
+     updated_at TEXT NOT NULL
+   );`,
+  `CREATE TABLE IF NOT EXISTS console_models (
+     range_key TEXT NOT NULL,
+     model TEXT NOT NULL,
+     request_count INTEGER NOT NULL DEFAULT 0,
+     total_input INTEGER NOT NULL DEFAULT 0,
+     uncached_input INTEGER NOT NULL DEFAULT 0,
+     output_tokens INTEGER NOT NULL DEFAULT 0,
+     cache_read INTEGER NOT NULL DEFAULT 0,
+     cache_write INTEGER NOT NULL DEFAULT 0,
+     reasoning INTEGER NOT NULL DEFAULT 0,
+     cost_usd REAL NOT NULL DEFAULT 0,
+     hit_rate REAL NOT NULL DEFAULT 0,
+     updated_at TEXT NOT NULL,
+     PRIMARY KEY (range_key, model)
+   );`,
+  `CREATE TABLE IF NOT EXISTS console_daily (
+     range_key TEXT NOT NULL,
+     date TEXT NOT NULL,
+     tokens INTEGER NOT NULL DEFAULT 0,
+     cost_usd REAL NOT NULL DEFAULT 0,
+     request_count INTEGER NOT NULL DEFAULT 0,
+     updated_at TEXT NOT NULL,
+     PRIMARY KEY (range_key, date)
+   );`,
+  `CREATE TABLE IF NOT EXISTS console_quota (
+     label TEXT PRIMARY KEY,
+     used REAL NOT NULL DEFAULT 0,
+     remaining REAL NOT NULL DEFAULT 0,
+     reset_at TEXT NOT NULL DEFAULT '',
+     reset_in_sec INTEGER NOT NULL DEFAULT 0,
+     used_usd REAL NOT NULL DEFAULT -1,
+     limit_usd REAL NOT NULL DEFAULT -1,
+     updated_at TEXT NOT NULL
+   );`,
 ];
 
 /** RDB 单例：建库建表，初始化单行表。getStore 单飞（并发首次调用共享同一次初始化），避免竞争抛错。 */

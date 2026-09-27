@@ -4,6 +4,7 @@ import openCodeApiTest from './OpenCodeApi.test';
 import syncManagerTest from './SyncManager.test';
 import recordsFilterTest from './RecordsFilter.test';
 import quotaSourceTest from './QuotaSource.test';
+import consoleSnapshotTest from './ConsoleSnapshot.test';
 
 export default function testsuite() {
   formatterTest();
@@ -12,4 +13,5 @@ export default function testsuite() {
   syncManagerTest();
   recordsFilterTest();
   quotaSourceTest();
+  consoleSnapshotTest();
 }

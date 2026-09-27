@@ -26,6 +26,8 @@ export struct DashboardPage {
   @StorageProp('glowLevel') glowLevel: number = 1;
   /** 是否已登录：未登录即免登录模式（仅配额可用），用于顶部提示。 */
   @StorageProp('hasToken') hasToken: boolean = false;
+  /** 当前展示的是否为离线快照（网络不可用时回退本地已存的官方数据）。 */
+  @StorageProp('consoleStale') consoleStale: boolean = false;
   /** 页面滚动控制器：绑定给 HDS 标题栏，驱动「内容滚入栏下渐变模糊」。 */
   private scroller: Scroller = new Scroller();
   @Watch('onSyncFinished') @StorageProp('syncFinishedVersion') syncFinishedVersion: number = 0;
@@ -126,6 +128,7 @@ export struct DashboardPage {
     if (source === 'official') { return '官方 API'; }
     if (source === 'console') { return '控制台接口'; }
     if (source === 'html') { return '页面解析'; }
+    if (source === 'snapshot') { return '离线快照'; }
     if (source === 'mock') { return '示例数据'; }
     return '';
   }
@@ -229,8 +232,17 @@ export struct DashboardPage {
             })
               .width('100%')
 
-            // 免登录模式提示：只配了 API Key 时，记录/统计无数据
-            if (!this.hasToken) {
+            // 离线快照提示：网络不可用时展示本地已存的官方数据
+            if (this.consoleStale) {
+              Text($r('app.string.stale_snapshot'))
+                .fontSize(11)
+                .fontColor($r('app.color.text_secondary'))
+                .width('100%')
+                .padding(10)
+                .borderRadius(10)
+                .backgroundColor($r('app.color.divider'))
+            } else if (!this.hasToken) {
+              // 免登录模式提示：只配了 API Key 时，记录/统计无数据
               Text($r('app.string.guest_banner'))
                 .fontSize(11)
                 .fontColor($r('app.color.text_secondary'))
