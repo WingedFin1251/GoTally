@@ -4,6 +4,8 @@ export class Constants {
   // opencode.ai 接口
   static readonly DASHBOARD_BASE: string = 'https://opencode.ai/workspace';
   static readonly OPENCODE_ORIGIN: string = 'https://opencode.ai';
+  /** 授权页所在域名（登录凭据可能落在该域下）。 */
+  static readonly AUTH_ORIGIN: string = 'https://auth.opencode.ai';
   /** 官方用量接口（API Key 鉴权，无需 cookie/工作区 ID）：三个窗口的已用百分比 + 重置时间。 */
   static readonly GO_USAGE_URL: string = 'https://opencode.ai/zen/go/v1/usage';
   /** 控制台 JSON 接口（cookie 鉴权，额外提供真实金额）：used/limit 单位为微分（1e-8 美元）。 */

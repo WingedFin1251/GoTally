@@ -79,6 +79,8 @@ const PLAN_RE: RegExp = /id:\s*"(usg_[^"]+)"[^}]*?enrichment:\$R\[\d+\]=\{plan:"
 const CREATED_RE: RegExp = /timeCreated:\s*\$R\[\d+\]\s*=\s*new Date\("([^"]+)"\)/;
 /** keys 页面内嵌数据形如 {id:"key_xxx",name:"gongsi",...}（对齐上游 v1.0.2）。 */
 const KEY_ENTRY_RE: RegExp = /\{id:"(key_[A-Za-z0-9]+)",name:"([^"]*)"/;
+/** 合法 cookie 名字符集（用于判断传入凭据是否已是完整的 name=value 串）。 */
+const COOKIE_NAME_RE: RegExp = /^[A-Za-z0-9_.-]+$/;
 
 function clampPercent(v: number): number {
   return Math.max(0, Math.min(100, v));
@@ -125,13 +127,16 @@ export class OpenCodeApi {
     if (cookie === '') {
       return '';
     }
-    const parts = cookie.split(';');
-    for (const part of parts) {
+    // 已含 cookie 名（name=value）→ 原样发送全部 cookie。
+    // 兼容凭据命名变化（历史上是 auth=，现在可能是控制台会话 cookie 等）。
+    for (const part of cookie.split(';')) {
       const p = part.trim();
-      if (p.startsWith('auth=')) {
-        return p;
+      const eq = p.indexOf('=');
+      if (eq > 0 && COOKIE_NAME_RE.test(p.substring(0, eq))) {
+        return cookie;
       }
     }
+    // 仅有裸值：按历史行为当作 auth 的值
     return `auth=${cookie}`;
   }
 

@@ -15,21 +15,69 @@ export class WebCookies {
    * @returns cookie 值；不存在或读取失败时为空串
    */
   static read(name: string, url: string): string {
+    const all = WebCookies.raw(url);
+    if (all === '') {
+      return '';
+    }
+    for (const part of all.split(';')) {
+      const p = part.trim();
+      if (p.startsWith(`${name}=`)) {
+        return p.substring(name.length + 1);
+      }
+    }
+    return '';
+  }
+
+  /** 读取某地址下可见的原始 cookie 串（失败返回空串）。 */
+  static raw(url: string): string {
     try {
       const all = webview.WebCookieManager.fetchCookieSync(url);
-      if (all === null || all === '') {
-        return '';
+      return all !== null && all !== undefined ? all : '';
+    } catch (e) {
+      // Web 组件未初始化 / cookie 存储不可用：静默降级到其他数据源
+      console.error('WebCookies.raw failed: ' + (e instanceof Error ? e.message : String(e)));
+      return '';
+    }
+  }
+
+  /**
+   * 汇总多个地址下可见的 cookie（去重后以 `name=value; name2=value2` 返回）。
+   * 登录凭据的域名可能从 opencode.ai 变为 auth.opencode.ai，故多地址汇总。
+   */
+  static readAll(urls: string[]): string {
+    const seen = new Set<string>();
+    const parts: string[] = [];
+    for (const url of urls) {
+      const all = WebCookies.raw(url);
+      if (all === '') {
+        continue;
       }
       for (const part of all.split(';')) {
         const p = part.trim();
-        if (p.startsWith(`${name}=`)) {
-          return p.substring(name.length + 1);
+        if (p === '' || seen.has(p)) {
+          continue;
         }
+        seen.add(p);
+        parts.push(p);
       }
-    } catch (e) {
-      // Web 组件未初始化 / cookie 存储不可用：静默降级到其他数据源
-      console.error('WebCookies.read failed: ' + (e instanceof Error ? e.message : String(e)));
     }
-    return '';
+    return parts.join('; ');
+  }
+
+  /** 诊断用：返回某地址下可见的 cookie **名**列表（不含值，避免泄露凭据）。 */
+  static names(url: string): string {
+    const all = WebCookies.raw(url);
+    if (all === '') {
+      return '(空)';
+    }
+    const names: string[] = [];
+    for (const part of all.split(';')) {
+      const p = part.trim();
+      const eq = p.indexOf('=');
+      if (eq > 0) {
+        names.push(p.substring(0, eq));
+      }
+    }
+    return names.length > 0 ? names.join(',') : '(空)';
   }
 }

@@ -4,6 +4,7 @@ import { webview } from '@kit.ArkWeb';
 import { OpenCodeApi } from '../network/OpenCodeApi';
 import { DataProvider } from '../data/DataProvider';
 import { Constants } from '../common/constants/Constants';
+import { WebCookies } from '../common/utils/WebCookies';
 
 const WORKSPACE_URL_RE: RegExp = /\/workspace\/(wrk_[A-Za-z0-9]+)/;
 
@@ -47,6 +48,10 @@ struct Login {
       if (!this.done && this.pollCount === 6) {
         this.hint = '若网页已显示登录成功，请点右上角「我已登录」';
       }
+      // 每 ~6s 打印一次 cookie 名快照（不含值），便于定位凭据抓取失败的原因
+      if (!this.done && this.pollCount % 10 === 0) {
+        console.error('login poll cookie names: ' + this.cookieDiagnostics());
+      }
       if (this.pollCount >= 150) {
         this.stopPolling();
       }
@@ -78,11 +83,49 @@ struct Login {
     }
   }
 
-  /** 手动兜底：用户确认网页已登录后，再取一次凭据。 */
+  /**
+   * 汇总候选地址下可见的全部 cookie，挑出可用作凭据的串。
+   *
+   * 兼容性考虑：凭据命名/域名历史上是 opencode.ai 下的 `auth`，
+   * 现在可能落在 auth.opencode.ai 或改名为会话类 cookie，故：
+   *   ① 多地址汇总（opencode.ai + auth.opencode.ai）
+   *   ② 优先含 `auth=`，其次任意名字含 session 的 cookie
+   *   ③ 命中后**整串保留**（发送全部 cookie 更稳），而不是只留一个
+   */
+  private readCredential(): string {
+    // 同时带上「当前页面地址」：cookie 可能带 path 作用域（如 /auth、/workspace），只查根域名会漏
+    const all = WebCookies.readAll([this.lastUrl, Constants.OPENCODE_ORIGIN, Constants.AUTH_ORIGIN]);
+    if (all === '') {
+      return '';
+    }
+    const parts = all.split(';');
+    let hasSessionLike = false;
+    for (const part of parts) {
+      const p = part.trim();
+      if (p.startsWith(`${Constants.AUTH_COOKIE_NAME}=`)) {
+        return all;
+      }
+      if (p.toLowerCase().includes('session')) {
+        hasSessionLike = true;
+      }
+    }
+    return hasSessionLike ? all : '';
+  }
+
+  /** 诊断串：各候选地址下可见的 cookie 名（不含值），抓不到凭据时用于定位。 */
+  private cookieDiagnostics(): string {
+    const page = WebCookies.names(this.lastUrl);
+    const a = WebCookies.names(Constants.OPENCODE_ORIGIN);
+    const b = WebCookies.names(Constants.AUTH_ORIGIN);
+    return `page=[${page}] opencode.ai=[${a}] auth=[${b}]`;
+  }
+
   private async manualFinish(): Promise<void> {
     await this.captureAndFinish(this.lastUrl);
     if (!this.done) {
-      this.hint = '还没取到登录凭据：请确认网页中已完成登录后重试';
+      const diag = this.cookieDiagnostics();
+      console.error('login credential missing: ' + diag);
+      this.hint = `未取到登录凭据（cookie: ${diag}）`;
     }
   }
 
@@ -90,31 +133,16 @@ struct Login {
     if (this.done) {
       return;
     }
-    let cookies: string = '';
-    try {
-      cookies = webview.WebCookieManager.fetchCookieSync(Constants.LOGIN_COOKIE_DOMAIN);
-    } catch (e) {
-      cookies = '';
-    }
-    if (cookies === null || cookies === '') {
-      return;
-    }
-    let authValue = '';
-    for (const part of cookies.split(';')) {
-      const p = part.trim();
-      if (p.startsWith(`${Constants.AUTH_COOKIE_NAME}=`)) {
-        authValue = p.substring(Constants.AUTH_COOKIE_NAME.length + 1);
-        break;
-      }
-    }
-    if (authValue === '') {
+    const credential = this.readCredential();
+    if (credential === '') {
       return;
     }
     const m = WORKSPACE_URL_RE.exec(url);
     const workspaceHint = m !== null ? m[1] : 'Default';
     this.done = true;
     this.stopPolling();
-    await DataProvider.getStore().saveToken(`auth=${authValue}`, workspaceHint);
+    console.error('login credential captured: ' + this.cookieDiagnostics());
+    await DataProvider.getStore().saveToken(credential, workspaceHint);
     // 触发首次全量同步（后台）
     DataProvider.getSyncManager().sync('full');
     this.getUIContext().getRouter().back();
