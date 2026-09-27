@@ -12,6 +12,8 @@ export class SettingsKeys {
   static readonly CURRENCY: string = 'currency';
   static readonly LANGUAGE: string = 'language';
   static readonly GLOW_LEVEL: string = 'glow_level';
+  /** 可选的 OpenCode Go API Key（填写后配额优先走官方接口）。 */
+  static readonly GO_API_KEY: string = 'go_api_key';
 }
 
 export interface AppSettings {
@@ -23,6 +25,8 @@ export interface AppSettings {
   language: string;
   /** 沉浸光感档位：0 弱(GENTLE) / 1 均衡(ADAPTIVE) / 2 强(EXQUISITE)。 */
   glowLevel: number;
+  /** 可选的 OpenCode Go API Key（空串表示未配置）。 */
+  goApiKey: string;
 }
 
 const DEFAULT_SETTINGS: AppSettings = {
@@ -33,6 +37,7 @@ const DEFAULT_SETTINGS: AppSettings = {
   currency: 'CNY',
   language: 'zh',
   glowLevel: 1,
+  goApiKey: '',
 };
 
 /** Preferences 设置存储（同步间隔/范围/开关/主题/货币/语言）。 */
@@ -63,6 +68,7 @@ export class SettingsStore {
       const currency = await pref.get(SettingsKeys.CURRENCY, DEFAULT_SETTINGS.currency) as string;
       const language = await pref.get(SettingsKeys.LANGUAGE, DEFAULT_SETTINGS.language) as string;
       const glowLevel = await pref.get(SettingsKeys.GLOW_LEVEL, DEFAULT_SETTINGS.glowLevel) as number;
+      const goApiKey = await pref.get(SettingsKeys.GO_API_KEY, DEFAULT_SETTINGS.goApiKey) as string;
       return {
         syncIntervalSec: interval,
         windowDays: windowRaw > 0 ? windowRaw : null,
@@ -71,6 +77,7 @@ export class SettingsStore {
         currency: currency,
         language: language,
         glowLevel: glowLevel,
+        goApiKey: goApiKey,
       };
     } catch (e) {
       throw e instanceof Error ? e : new Error(String(e));
@@ -101,6 +108,11 @@ export class SettingsStore {
     return (await SettingsStore.getAll()).glowLevel;
   }
 
+  /** 可选的 OpenCode Go API Key（空串表示未配置）。 */
+  static async getGoApiKey(): Promise<string> {
+    return (await SettingsStore.getAll()).goApiKey;
+  }
+
   static async put(key: string, value: preferences.ValueType): Promise<void> {
     try {
       const pref = await SettingsStore.getPref();
@@ -121,6 +133,7 @@ export class SettingsStore {
       await pref.put(SettingsKeys.CURRENCY, payload.currency);
       await pref.put(SettingsKeys.LANGUAGE, payload.language);
       await pref.put(SettingsKeys.GLOW_LEVEL, payload.glowLevel);
+      await pref.put(SettingsKeys.GO_API_KEY, payload.goApiKey);
       await pref.flush();
     } catch (e) {
       throw e instanceof Error ? e : new Error(String(e));

@@ -1,8 +1,47 @@
 // entry/src/main/ets/network/OpenCodeApi.ets
 import { http } from '@kit.NetworkKit';
 import { Constants } from '../common/constants/Constants';
+import { WebCookies } from '../common/utils/WebCookies';
 import type { QuotaWindow, QuotaResult, UsageRecord, WorkspaceRef } from '../model/UsageRecord';
 import type { KeyNamePair } from '../model/Stats';
+
+/** 官方 /zen/go/v1/usage 单个窗口（percent = 已用百分比）。 */
+interface GoUsageWindow {
+  status?: string;
+  percent?: number;
+  resetsAt?: string;
+}
+
+interface GoUsageBlock {
+  rolling?: GoUsageWindow;
+  weekly?: GoUsageWindow;
+  monthly?: GoUsageWindow;
+}
+
+interface GoUsageResponse {
+  usage?: GoUsageBlock;
+}
+
+/** 控制台 /console/api/go/status 单个 meter（金额单位：微分，1e-8 美元）。 */
+interface ConsoleMeter {
+  resetsAt?: string;
+  limitMicroCents?: number;
+  usedMicroCents?: number;
+}
+
+interface ConsoleMeters {
+  fiveHour?: ConsoleMeter;
+  week?: ConsoleMeter;
+  month?: ConsoleMeter;
+}
+
+interface ConsoleAccess {
+  meters?: ConsoleMeters;
+}
+
+interface ConsoleStatusResponse {
+  access?: ConsoleAccess;
+}
 
 interface QuotaPattern {
   label: string;
@@ -238,26 +277,239 @@ export class OpenCodeApi {
     return refs[0].id;
   }
 
-  static async fetchQuota(token: string, workspaceHint: string): Promise<QuotaResult> {
+  /**
+   * 拉取配额（三级数据源，逐级降级）：
+   * ① 官方 API Key 接口 `GET /zen/go/v1/usage`（最稳，无需 cookie，仅百分比+重置时间）
+   * ② 控制台 JSON 接口 `GET /console/api/go/status`（cookie 鉴权，**额外提供真实金额**）
+   * ③ Dashboard HTML 解析（兜底，原有实现）
+   *
+   * @param token 登录 cookie 串（auth=…）
+   * @param workspaceHint 工作区提示（Default/wrk_…）
+   * @param goApiKey 可选的 OpenCode Go API Key；填写后优先走官方接口
+   */
+  static async fetchQuota(token: string, workspaceHint: string, goApiKey: string = ''): Promise<QuotaResult> {
     const updatedAt = new Date().toISOString();
     const hint = (workspaceHint.trim() === '' ? 'Default' : workspaceHint.trim());
-    if (token.trim() === '') {
-      return { name: 'Default', workspaceId: hint, success: false, updatedAt: updatedAt, windows: [], error: '未配置 token' };
+    const errors: string[] = [];
+
+    // ① 官方 API Key 接口
+    if (goApiKey.trim() !== '') {
+      try {
+        const windows = await OpenCodeApi.fetchQuotaOfficial(goApiKey);
+        if (windows.length > 0) {
+          return {
+            name: 'Default', workspaceId: hint, success: true, updatedAt: updatedAt,
+            windows: windows, error: '', source: 'official',
+          };
+        }
+        errors.push('官方接口: 未返回额度数据');
+      } catch (e) {
+        errors.push('官方接口: ' + (e instanceof Error ? e.message : String(e)));
+      }
     }
+
+    if (token.trim() === '') {
+      return {
+        name: 'Default', workspaceId: hint, success: false, updatedAt: updatedAt, windows: [],
+        error: errors.length > 0 ? errors.join('；') : '未配置 token', source: '',
+      };
+    }
+
+    let workspaceId = hint;
     try {
-      const workspaceId = await OpenCodeApi.resolveWorkspaceId(hint, token);
+      workspaceId = await OpenCodeApi.resolveWorkspaceId(hint, token);
+    } catch (e) {
+      errors.push('工作区解析: ' + (e instanceof Error ? e.message : String(e)));
+    }
+
+    // ② 控制台 JSON 接口（cookie 鉴权，含金额）
+    try {
+      const consoleCookie = OpenCodeApi.consoleCookie(token);
+      const windows = await OpenCodeApi.fetchQuotaConsole(consoleCookie, workspaceId);
+      if (windows.length > 0) {
+        return {
+          name: 'Default', workspaceId: workspaceId, success: true, updatedAt: updatedAt,
+          windows: windows, error: '', source: 'console',
+        };
+      }
+      errors.push('控制台接口: 未返回额度数据');
+    } catch (e) {
+      errors.push('控制台接口: ' + (e instanceof Error ? e.message : String(e)));
+    }
+
+    // ③ Dashboard HTML 解析兜底
+    try {
       const cookie = OpenCodeApi.buildCookieHeader(token);
       const url = `${Constants.DASHBOARD_BASE}/${encodeURIComponent(workspaceId)}/go`;
-      const html = await OpenCodeApi.fetchText(url, cookie, '', 'https://opencode.ai');
+      const html = await OpenCodeApi.fetchText(url, cookie, '', Constants.OPENCODE_ORIGIN);
       const windows = OpenCodeApi.parseQuotaHtml(html, new Date().toISOString());
       if (windows.length === 0) {
         throw new Error('无法从 Dashboard HTML 解析额度数据');
       }
-      return { name: 'Default', workspaceId: workspaceId, success: true, updatedAt: updatedAt, windows: windows, error: '' };
+      return {
+        name: 'Default', workspaceId: workspaceId, success: true, updatedAt: updatedAt,
+        windows: windows, error: '', source: 'html',
+      };
     } catch (e) {
-      const msg = e instanceof Error ? e.message : String(e);
-      return { name: 'Default', workspaceId: hint, success: false, updatedAt: updatedAt, windows: [], error: msg };
+      errors.push('页面解析: ' + (e instanceof Error ? e.message : String(e)));
+      return {
+        name: 'Default', workspaceId: workspaceId, success: false, updatedAt: updatedAt, windows: [],
+        error: errors.join('；'), source: '',
+      };
     }
+  }
+
+  /** 官方用量接口：`GET /zen/go/v1/usage` + `Authorization: Bearer <API Key>`。 */
+  static async fetchQuotaOfficial(apiKey: string): Promise<QuotaWindow[]> {
+    const key = apiKey.trim();
+    if (key === '') {
+      return [];
+    }
+    const header: Record<string, string> = {
+      'Authorization': `Bearer ${key}`,
+      'Accept': 'application/json',
+      'User-Agent': Constants.USER_AGENT,
+    };
+    const text = await OpenCodeApi.fetchJson(Constants.GO_USAGE_URL, header);
+    return OpenCodeApi.parseOfficialUsage(text, new Date().toISOString());
+  }
+
+  /**
+   * 解析官方 `/zen/go/v1/usage` 响应：`{ usage: { rolling, weekly, monthly } }`，
+   * 每窗口 `percent`（已用百分比）+ `resetsAt`（ISO）。纯函数，便于单测锁定字段契约。
+   */
+  static parseOfficialUsage(text: string, nowIso: string): QuotaWindow[] {
+    const nowMs = Date.parse(nowIso);
+    const data = JSON.parse(text) as GoUsageResponse;
+    const block = data.usage;
+    if (block === undefined) {
+      return [];
+    }
+    const out: QuotaWindow[] = [];
+    const rolling = OpenCodeApi.windowFromPercent('5h', block.rolling, nowMs);
+    if (rolling !== null) {
+      out.push(rolling);
+    }
+    const weekly = OpenCodeApi.windowFromPercent('weekly', block.weekly, nowMs);
+    if (weekly !== null) {
+      out.push(weekly);
+    }
+    const monthly = OpenCodeApi.windowFromPercent('monthly', block.monthly, nowMs);
+    if (monthly !== null) {
+      out.push(monthly);
+    }
+    return out;
+  }
+
+  /**
+   * 控制台 JSON 接口：`GET /console/api/go/status` + cookie + `x-org-id: wrk_…`。
+   * 金额字段单位为微分（1e-8 美元），据此换算百分比与美元金额。
+   */
+  static async fetchQuotaConsole(cookie: string, workspaceId: string): Promise<QuotaWindow[]> {
+    const ws = workspaceId.trim();
+    if (cookie === '' || ws === '') {
+      return [];
+    }
+    const header: Record<string, string> = {
+      'Cookie': cookie,
+      'x-org-id': ws,
+      'Accept': 'application/json',
+      'User-Agent': Constants.USER_AGENT,
+      'Origin': Constants.OPENCODE_ORIGIN,
+      'Referer': `${Constants.OPENCODE_ORIGIN}/console/${ws}/go`,
+    };
+    const text = await OpenCodeApi.fetchJson(Constants.CONSOLE_GO_STATUS_URL, header);
+    return OpenCodeApi.parseConsoleStatus(text, new Date().toISOString());
+  }
+
+  /**
+   * 解析控制台 `/console/api/go/status` 响应：
+   * `{ access: { meters: { fiveHour, week, month } } }`，每 meter 含 resetsAt/limitMicroCents/usedMicroCents。
+   */
+  static parseConsoleStatus(text: string, nowIso: string): QuotaWindow[] {
+    const nowMs = Date.parse(nowIso);
+    const data = JSON.parse(text) as ConsoleStatusResponse;
+    const access = data.access;
+    const meters = access !== undefined ? access.meters : undefined;
+    if (meters === undefined) {
+      return [];
+    }
+    const out: QuotaWindow[] = [];
+    const fiveHour = OpenCodeApi.windowFromMeter('5h', meters.fiveHour, nowMs);
+    if (fiveHour !== null) {
+      out.push(fiveHour);
+    }
+    const week = OpenCodeApi.windowFromMeter('weekly', meters.week, nowMs);
+    if (week !== null) {
+      out.push(week);
+    }
+    const month = OpenCodeApi.windowFromMeter('monthly', meters.month, nowMs);
+    if (month !== null) {
+      out.push(month);
+    }
+    return out;
+  }
+
+  /** 控制台接口所需 cookie：优先取 WebView 中的控制台会话 cookie，退回登录 token。 */
+  private static consoleCookie(token: string): string {
+    const session = WebCookies.read(Constants.CONSOLE_COOKIE_NAME, Constants.OPENCODE_ORIGIN);
+    if (session !== '') {
+      return `${Constants.CONSOLE_COOKIE_NAME}=${session}`;
+    }
+    return OpenCodeApi.buildCookieHeader(token);
+  }
+
+  /** 官方接口窗口 → QuotaWindow（仅百分比与重置时间）。 */
+  private static windowFromPercent(label: string, w: GoUsageWindow | undefined, nowMs: number): QuotaWindow | null {
+    if (w === undefined || w.percent === undefined) {
+      return null;
+    }
+    const pct = clampPercent(Number(w.percent));
+    const iso = w.resetsAt !== undefined ? w.resetsAt : '';
+    return {
+      label: label,
+      used: pct,
+      remaining: Number((100 - pct).toFixed(1)),
+      total: 100,
+      unit: '%',
+      resetAt: iso,
+      resetInSec: iso !== '' ? OpenCodeApi.secondsUntil(iso, nowMs) : 0,
+    };
+  }
+
+  /** 控制台 meter → QuotaWindow（已用/限额，单位微分 → 美元），限额缺失时返回 null。 */
+  private static windowFromMeter(label: string, meter: ConsoleMeter | undefined, nowMs: number): QuotaWindow | null {
+    if (meter === undefined) {
+      return null;
+    }
+    const limit = meter.limitMicroCents !== undefined ? meter.limitMicroCents : 0;
+    if (limit <= 0) {
+      return null;
+    }
+    const usedRaw = meter.usedMicroCents !== undefined ? meter.usedMicroCents : 0;
+    // 保留一位小数，保证「已用 + 剩余 = 100」且展示稳定
+    const pct = Number(clampPercent((usedRaw / limit) * 100).toFixed(1));
+    const iso = meter.resetsAt !== undefined ? meter.resetsAt : '';
+    return {
+      label: label,
+      used: pct,
+      remaining: Number((100 - pct).toFixed(1)),
+      total: 100,
+      unit: '%',
+      resetAt: iso,
+      resetInSec: iso !== '' ? OpenCodeApi.secondsUntil(iso, nowMs) : 0,
+      usedUsd: Number((usedRaw / 1e8).toFixed(4)),
+      limitUsd: Number((limit / 1e8).toFixed(2)),
+    };
+  }
+
+  /** ISO 时间 → 距参考时刻的秒数（无效或已过期归零）。 */
+  private static secondsUntil(iso: string, nowMs: number): number {
+    const t = Date.parse(iso);
+    if (Number.isNaN(t)) {
+      return 0;
+    }
+    return Math.max(0, Math.floor((t - nowMs) / 1000));
   }
 
   /**
@@ -393,5 +645,46 @@ export class OpenCodeApi {
     return new Promise<void>((resolve) => {
       setTimeout(resolve, ms);
     });
+  }
+
+  /**
+   * 通用 JSON 请求（自定义请求头，带退避重试）。
+   * 401/403（凭据问题）与 404（接口不存在）立即失败，交由上层降级到其他数据源。
+   */
+  private static async fetchJson(url: string, headers: Record<string, string>): Promise<string> {
+    let lastErr: Error = new Error('未知错误');
+    for (let attempt = 0; attempt < Constants.RETRY_BACKOFF_MS.length; attempt++) {
+      const req = http.createHttp();
+      try {
+        const resp = await req.request(url, {
+          method: http.RequestMethod.GET,
+          header: headers,
+          connectTimeout: Constants.REQUEST_TIMEOUT_MS,
+          readTimeout: Constants.REQUEST_TIMEOUT_MS,
+        });
+        req.destroy();
+        const code = resp.responseCode;
+        if (code === 401 || code === 403) {
+          throw new Error(`认证失败 (HTTP ${code})`);
+        }
+        if (code === 404) {
+          throw new Error('接口不存在 (HTTP 404)');
+        }
+        if (code < 200 || code >= 300) {
+          throw new Error(`请求返回 HTTP ${code}`);
+        }
+        return resp.result as string;
+      } catch (e) {
+        req.destroy();
+        lastErr = e instanceof Error ? e : new Error(String(e));
+        if (lastErr.message.includes('认证失败') || lastErr.message.includes('接口不存在')) {
+          throw lastErr;
+        }
+        if (attempt < Constants.RETRY_BACKOFF_MS.length - 1) {
+          await OpenCodeApi.sleep(Constants.RETRY_BACKOFF_MS[attempt]);
+        }
+      }
+    }
+    throw lastErr;
   }
 }

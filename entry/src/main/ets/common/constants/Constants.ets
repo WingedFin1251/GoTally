@@ -3,6 +3,13 @@
 export class Constants {
   // opencode.ai 接口
   static readonly DASHBOARD_BASE: string = 'https://opencode.ai/workspace';
+  static readonly OPENCODE_ORIGIN: string = 'https://opencode.ai';
+  /** 官方用量接口（API Key 鉴权，无需 cookie/工作区 ID）：三个窗口的已用百分比 + 重置时间。 */
+  static readonly GO_USAGE_URL: string = 'https://opencode.ai/zen/go/v1/usage';
+  /** 控制台 JSON 接口（cookie 鉴权，额外提供真实金额）：used/limit 单位为微分（1e-8 美元）。 */
+  static readonly CONSOLE_GO_STATUS_URL: string = 'https://opencode.ai/console/api/go/status';
+  /** 控制台会话 cookie 名（HttpOnly，需从 WebView cookie 存储读取）。 */
+  static readonly CONSOLE_COOKIE_NAME: string = '__Host-console_session';
   static readonly WORKSPACE_SERVER_ID: string =
     'def39973159c7f0483d8793a822b8dbb10d067e12c65455fcb4608459ba0234f';
   static readonly DEFAULT_USAGE_SERVER_ID: string =

@@ -5,12 +5,17 @@ export struct QuotaProgress {
   @Prop percent: number = 0;
   @Prop remainingText: string = '';
   @Prop resetText: string = '';
+  /** 金额明细（如 "$3.23 / $12.00"）；仅控制台接口提供，为空则隐藏。 */
+  @Prop amountText: string = '';
 
   build() {
     Column({ space: 6 }) {
       Row() {
         Text(this.label).fontSize(13).fontColor($r('app.color.text_primary'))
         Blank()
+        if (this.amountText !== '') {
+          Text(this.amountText).fontSize(11).fontColor($r('app.color.text_muted')).margin({ right: 8 })
+        }
         Text(`${this.percent.toFixed(1)}%`).fontSize(13).fontWeight(FontWeight.Bold)
       }
       .width('100%')

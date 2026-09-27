@@ -25,6 +25,7 @@ interface PillOption {
 export struct SettingsPage {
   @State settings: AppSettings = {
     syncIntervalSec: 300, windowDays: 60, autoSync: true, theme: 'light', currency: 'CNY', language: 'zh', glowLevel: 1,
+    goApiKey: '',
   };
   @State loggedIn: boolean = false;
   @State workspace: string = '';
@@ -34,6 +35,8 @@ export struct SettingsPage {
   /** 应用版本号（读取 bundle 信息，单一来源，避免多处硬编码不一致）。 */
   @State appVersion: string = '';
   @State checkingUpdate: boolean = false;
+  /** 可选 OpenCode Go API Key 的编辑态（留空保存即清除）。 */
+  @State goApiKeyDraft: string = '';
   /** 上一次 onProgress 上报的阶段，用于捕捉 done/error 完成时刻（仅触发一次 toast/刷新）。 */
   private lastPhase: string = 'idle';
   /** 滚动联动：向下滚隐藏悬浮导航栏、向上滚显示（由 Index 播放 HDS 滚动动画）。 */
@@ -81,6 +84,7 @@ export struct SettingsPage {
 
   private async load(): Promise<void> {
     this.settings = await SettingsStore.getAll();
+    this.goApiKeyDraft = this.settings.goApiKey;
     const token = await DataProvider.getStore().getToken();
     this.loggedIn = token.trim() !== '';
     this.workspace = await DataProvider.getStore().getWorkspaceHint();
@@ -272,6 +276,22 @@ export struct SettingsPage {
           SettingRow({ title: $r('app.string.sync_info'), desc: this.syncInfoDesc() }) {}
         }
 
+        // 数据源（可选）
+        SettingsCard({ title: $r('app.string.set_source') }) {
+          SettingRow({ title: $r('app.string.go_api_key'), desc: $r('app.string.go_api_key_desc') }) {
+            Row({ space: 8 }) {
+              TextInput({ text: this.goApiKeyDraft, placeholder: $r('app.string.go_api_key_ph') })
+                .type(InputType.Password)
+                .fontSize(12)
+                .height(34)
+                .layoutWeight(1)
+                .onChange((v: string) => { this.goApiKeyDraft = v; })
+              Button($r('app.string.save')).fontSize(12).height(30)
+                .onClick(() => { this.saveGoApiKey(); })
+            }
+          }
+        }
+
         // 更新
         SettingsCard({ title: $r('app.string.set_update') }) {
           SettingRow({ title: $r('app.string.current_version'), desc: this.appVersion !== '' ? this.appVersion : '—' }) {}
@@ -334,6 +354,23 @@ export struct SettingsPage {
   /** 读取应用版本号（单一来源：bundle 信息）。 */
   private async loadVersion(): Promise<void> {
     this.appVersion = await AppInfo.versionName();
+  }
+
+  /**
+   * 保存可选的 OpenCode Go API Key（留空即清除）。
+   * 填写后配额优先走官方 `GET /zen/go/v1/usage`（无需 cookie，最稳）。
+   */
+  private async saveGoApiKey(): Promise<void> {
+    const v = this.goApiKeyDraft.trim();
+    try {
+      this.settings.goApiKey = v;
+      await SettingsStore.save(this.settings);
+      this.goApiKeyDraft = v;
+      this.showToastSafe(this.str(v === '' ? $r('app.string.go_api_key_cleared').id : $r('app.string.go_api_key_saved').id, ''));
+    } catch (e) {
+      console.error('saveGoApiKey failed: ' + (e instanceof Error ? e.message : String(e)));
+      this.showToastSafe(this.str($r('app.string.update_failed').id, ''));
+    }
   }
 
   /** 取字符串资源并按 {0} 替换参数（个别版本 getStringSync 不执行占位符格式化，故手动替换）。 */

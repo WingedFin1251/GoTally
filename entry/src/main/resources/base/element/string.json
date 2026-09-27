@@ -125,6 +125,13 @@
     { "name": "glow_strong", "value": "强" },
 
     { "name": "set_data", "value": "数据" },
+    { "name": "set_source", "value": "数据源（可选）" },
+    { "name": "go_api_key", "value": "OpenCode Go API Key" },
+    { "name": "go_api_key_desc", "value": "填写后配额优先走官方接口（无需 cookie）" },
+    { "name": "go_api_key_ph", "value": "粘贴 API Key，留空保存即清除" },
+    { "name": "go_api_key_saved", "value": "已保存 API Key，配额将优先走官方接口" },
+    { "name": "go_api_key_cleared", "value": "已清除 API Key" },
+    { "name": "save", "value": "保存" },
     { "name": "data_dir", "value": "数据目录" },
     { "name": "sync_info", "value": "同步记录" },
     { "name": "last_sync", "value": "最近同步" },

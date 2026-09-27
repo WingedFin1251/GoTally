@@ -28,6 +28,10 @@ export interface QuotaWindow {
   unit: string;
   resetAt: string;   // ISO
   resetInSec: number;
+  /** 已用金额（美元）；仅控制台 JSON 接口提供，未知时 undefined。 */
+  usedUsd?: number;
+  /** 限额金额（美元）；仅控制台 JSON 接口提供，未知时 undefined。 */
+  limitUsd?: number;
 }
 
 export interface QuotaResult {
@@ -37,6 +41,8 @@ export interface QuotaResult {
   updatedAt: string;
   windows: QuotaWindow[];
   error: string;
+  /** 数据来源：official（官方 API Key 接口）/ console（控制台 JSON）/ html（页面解析兜底）。 */
+  source?: string;
 }
 
 export interface SyncState {

@@ -3,6 +3,7 @@ import timeUtilTest from './TimeUtil.test';
 import openCodeApiTest from './OpenCodeApi.test';
 import syncManagerTest from './SyncManager.test';
 import recordsFilterTest from './RecordsFilter.test';
+import quotaSourceTest from './QuotaSource.test';
 
 export default function testsuite() {
   formatterTest();
@@ -10,4 +11,5 @@ export default function testsuite() {
   openCodeApiTest();
   syncManagerTest();
   recordsFilterTest();
+  quotaSourceTest();
 }

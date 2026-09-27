@@ -87,6 +87,7 @@ export struct DashboardPage {
       Row() {
         Text($r('app.string.quota_title')).fontSize(15).fontWeight(FontWeight.Bold)
         Blank()
+        Text(this.sourceLabel(this.vm.quotaSource)).fontSize(11).fontColor($r('app.color.text_muted'))
       }
       .width('100%')
       ForEach(this.vm.quota, (q: QuotaWindow) => {
@@ -95,6 +96,7 @@ export struct DashboardPage {
           percent: q.used,
           remainingText: `${q.remaining}%`,
           resetText: formatReset(q.resetInSec, isZh()),
+          amountText: this.amountText(q),
         })
       }, (q: QuotaWindow) => q.label)
     }
@@ -105,6 +107,25 @@ export struct DashboardPage {
     if (label === '5h') { return '5小时'; }
     if (label === 'weekly') { return '每周'; }
     return '每月';
+  }
+
+  /** 金额明细（仅控制台 JSON 接口提供）：已用 $x / 限额 $y。 */
+  private amountText(q: QuotaWindow): string {
+    const used = q.usedUsd !== undefined ? q.usedUsd : -1;
+    const limit = q.limitUsd !== undefined ? q.limitUsd : -1;
+    if (used < 0 || limit <= 0) {
+      return '';
+    }
+    return `$${used.toFixed(2)} / $${limit.toFixed(2)}`;
+  }
+
+  /** 配额数据来源标签（便于确认当前走的是哪一级数据源）。 */
+  private sourceLabel(source: string): string {
+    if (source === 'official') { return '官方 API'; }
+    if (source === 'console') { return '控制台接口'; }
+    if (source === 'html') { return '页面解析'; }
+    if (source === 'mock') { return '示例数据'; }
+    return '';
   }
 
   @Builder
