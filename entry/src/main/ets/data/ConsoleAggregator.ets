@@ -68,6 +68,12 @@ export class ConsoleAggregator implements UsageAggregator {
     this.wsProvider = wsProvider;
   }
 
+  /** 使聚合缓存失效（「立即刷新」/同步按钮触发，强制下次读取实时官方数据）。 */
+  static invalidate(): void {
+    ConsoleAggregator.cache.clear();
+    ConsoleAggregator.cacheAt.clear();
+  }
+
   async totals(period: string): Promise<Totals> {
     const t = await this.local.totals(period);
     if (t.requestCount > 0) {

@@ -178,6 +178,10 @@
     { "name": "guest_banner", "value": "免登录模式 · 仅显示配额；登录后可查看用量记录与统计" },
     { "name": "guest_records_hint", "value": "免登录模式 · 登录后可同步使用记录与统计" },
     { "name": "records_unavailable", "value": "当前登录方式无法读取逐条明细（官方已更换接口）：总览与统计数据来自官方聚合接口，明细列表暂不可用" },
+    { "name": "refresh_official", "value": "刷新官方数据" },
+    { "name": "refresh_official_desc", "value": "当前登录方式无逐条明细：点按刷新官方配额与统计数据" },
+    { "name": "refresh_now", "value": "立即刷新" },
+    { "name": "refreshed_official", "value": "已刷新官方数据" },
     { "name": "login_note", "value": "点击后将打开 OpenCode Go 官方授权页完成登录。" },
 
     { "name": "sync_idle", "value": "待同步" },

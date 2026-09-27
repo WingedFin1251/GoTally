@@ -1,5 +1,6 @@
 // entry/src/main/ets/network/SyncManager.ets
 import { Constants } from '../common/constants/Constants';
+import { ConsoleAggregator } from '../data/ConsoleAggregator';
 import type { UsageStore } from '../data/UsageStore';
 import type { UsageFetcher } from './UsageFetcher';
 import type { UsageRecord } from '../model/UsageRecord';
@@ -116,6 +117,18 @@ export class SyncManager {
           return this.finish({ ok: false, error: msg });
         }
       }
+      // 新登录方式（控制台会话，cookie 里已无 auth）下官方已废弃逐条明细接口：
+      // 「同步」改为刷新官方聚合数据（使缓存失效并广播刷新），
+      // 不再做必然为 0 的明细分页拉取（否则用户看到「同步 0 条 + 报错」）。
+      if (!token.includes('auth=')) {
+        await this.refreshKeyNames(workspaceId, token);
+        ConsoleAggregator.invalidate();
+        await this.store.updateSyncState('ok', '', 0);
+        this.progress.inserted = 0;
+        this.setPhase('done', '已刷新官方数据');
+        return this.finish({ ok: true, inserted: 0 });
+      }
+
       const windowDays = await this.store.getWindowDays();
       const maxPages = mode === 'full' ? Constants.MAX_FULL_PAGES : Constants.INCREMENTAL_PAGES;
       let totalInserted = 0;

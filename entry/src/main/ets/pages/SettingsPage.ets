@@ -37,6 +37,8 @@ export struct SettingsPage {
   @State checkingUpdate: boolean = false;
   /** 可选 OpenCode Go API Key 的编辑态（留空保存即清除）。 */
   @State goApiKeyDraft: string = '';
+  /** 当前登录方式是否无逐条明细（新控制台会话登录）：同步按钮改为「立即刷新」。 */
+  @StorageProp('recordsUnavailable') recordsUnavailable: boolean = false;
   /** 上一次 onProgress 上报的阶段，用于捕捉 done/error 完成时刻（仅触发一次 toast/刷新）。 */
   private lastPhase: string = 'idle';
   /** 滚动联动：向下滚隐藏悬浮导航栏、向上滚显示（由 Index 播放 HDS 滚动动画）。 */
@@ -105,8 +107,13 @@ export struct SettingsPage {
       if (ctx !== undefined) {
         const rm = ctx.resourceManager;
         if (p.phase === 'done') {
-          const tpl = rm.getStringSync($r('app.string.sync_done').id);
-          msg = tpl.split('{0}').join(`${p.inserted}`);
+          if (this.recordsUnavailable) {
+            // 控制台登录：同步的语义是「刷新官方聚合数据」，没有新增条数可报
+            msg = rm.getStringSync($r('app.string.refreshed_official').id);
+          } else {
+            const tpl = rm.getStringSync($r('app.string.sync_done').id);
+            msg = tpl.split('{0}').join(`${p.inserted}`);
+          }
         } else {
           const base = rm.getStringSync($r('app.string.sync_error').id);
           msg = p.message !== '' ? `${base}: ${p.message}` : base;
@@ -203,8 +210,8 @@ export struct SettingsPage {
               ],
               (v: string) => { this.settings.windowDays = v === 'all' ? null : Number(v); SettingsStore.save(this.settings); AppStorage.setOrCreate('autoSyncChanged', (AppStorage.get('autoSyncChanged') as number ?? 0) + 1); })
           }
-          SettingRow({ title: $r('app.string.full_sync'), desc: this.syncProgressMsg !== '' ? this.syncProgressMsg : $r('app.string.full_sync_desc') }) {
-            Button(this.syncing ? $r('app.string.syncing') : $r('app.string.start_full_sync'))
+          SettingRow({ title: this.recordsUnavailable ? $r('app.string.refresh_official') : $r('app.string.full_sync'), desc: this.syncProgressMsg !== '' ? this.syncProgressMsg : (this.recordsUnavailable ? $r('app.string.refresh_official_desc') : $r('app.string.full_sync_desc')) }) {
+            Button(this.syncing ? $r('app.string.syncing') : (this.recordsUnavailable ? $r('app.string.refresh_now') : $r('app.string.start_full_sync')))
               .fontSize(12).height(30)
               .enabled(!this.syncing)
               .onClick(() => { DataProvider.getSyncManager().sync('full'); })
