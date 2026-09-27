@@ -42,6 +42,8 @@ export struct SettingsPage {
   @StorageProp('recordsUnavailable') recordsUnavailable: boolean = false;
   /** 本地累计的用量历史天数（官方接口只给 30 天窗口，靠本地按天累积延长）。 */
   @State historyDays: number = 0;
+  /** 本地历史覆盖的日期区间（如 `2026-09-12 → 2026-09-27`）。 */
+  @State historyRange: string = '';
   /** 上一次 onProgress 上报的阶段，用于捕捉 done/error 完成时刻（仅触发一次 toast/刷新）。 */
   private lastPhase: string = 'idle';
   /** 滚动联动：向下滚隐藏悬浮导航栏、向上滚显示（由 Index 播放 HDS 滚动动画）。 */
@@ -94,12 +96,14 @@ export struct SettingsPage {
     this.workspace = await DataProvider.getStore().getWorkspaceHint();
     this.syncState = await DataProvider.getStore().getSyncState();
     this.historyDays = await ConsoleSnapshotStore.historyDayCount();
+    this.historyRange = await ConsoleSnapshotStore.historyRange();
   }
 
   /** 本地历史累计描述：官方接口只提供 30 天窗口，超出部分靠本地按天累积。 */
   private historyDesc(): string {
     if (this.historyDays > 0) {
-      return this.str($r('app.string.history_desc').id, `${this.historyDays}`);
+      const range = this.historyRange !== '' ? `（${this.historyRange}）` : '';
+      return this.str($r('app.string.history_desc').id, `${this.historyDays}`) + range;
     }
     return this.str($r('app.string.history_none').id, '');
   }
@@ -108,6 +112,7 @@ export struct SettingsPage {
   private async onSyncFinished(p: SyncProgress): Promise<void> {
     this.syncProgressMsg = '';
     this.historyDays = await ConsoleSnapshotStore.historyDayCount();
+    this.historyRange = await ConsoleSnapshotStore.historyRange();
     try {
       this.syncState = await DataProvider.getStore().getSyncState();
     } catch (e) {

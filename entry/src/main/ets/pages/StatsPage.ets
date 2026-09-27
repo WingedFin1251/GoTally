@@ -109,8 +109,26 @@ export struct StatsPage {
     AppStorage.setOrCreate('usdCny', await OpenCodeApi.fetchUsdCny());
   }
 
-  private dimValue(m: ModelStat, dim: string): number {
-    if (dim === 'output') { return m.totalOutputTokens; }
+  /**
+   * 趋势图右上角标签：`09-12 → 09-27 · 15 天`（>30 天时补「含本地累计」）。
+   * 「今天」周期是 24 小时逐时趋势，不显示区间。
+   */
+  private trendRangeLabel(): string {
+    if (this.chart.period === Constants.PERIOD_TODAY) {
+      return '';
+    }
+    const days = this.chart.daily30;
+    if (days.length === 0) {
+      return '';
+    }
+    const first = days[0].date;
+    const last = days[days.length - 1].date;
+    const short = (d: string): string => d.length >= 10 ? d.substring(5) : d;
+    const extra = days.length > 30 ? ' · 含本地累计' : '';
+    return `${short(first)} → ${short(last)} · ${days.length} 天${extra}`;
+  }
+
+  private dimValue(m: ModelStat, dim: string): number {    if (dim === 'output') { return m.totalOutputTokens; }
     if (dim === 'cost') { return m.totalCostUsd; }
     return m.totalInputTokens;
   }
@@ -366,6 +384,10 @@ export struct StatsPage {
       Row() {
         Text($r('app.string.usage_trend')).fontSize(15).fontWeight(FontWeight.Bold)
         Blank()
+        // 覆盖区间与来源：一眼看出这张图包含多少天、是否含本地累计（官方窗口外）
+        if (this.trendRangeLabel() !== '') {
+          Text(this.trendRangeLabel()).fontSize(11).fontColor($r('app.color.text_muted'))
+        }
       }
       .width('100%')
       if ((this.chart.version & 1) === 0) {

@@ -391,6 +391,25 @@ export class ConsoleSnapshotStore {
     return out;
   }
 
+  /** 本地历史覆盖的日期区间（如 `09-12 → 09-27`）；无数据返回空串。 */
+  static async historyRange(): Promise<string> {
+    try {
+      const store = await RdbHelper.getStore();
+      const rs = await store.querySql('SELECT MIN(date) AS a, MAX(date) AS b FROM console_history');
+      let s = '';
+      if (rs.goToFirstRow()) {
+        const a = rs.getString(rs.getColumnIndex('a'));
+        const b = rs.getString(rs.getColumnIndex('b'));
+        s = a !== null && a !== '' ? `${a} → ${b}` : '';
+      }
+      rs.close();
+      return s;
+    } catch (e) {
+      console.error('historyRange failed: ' + (e instanceof Error ? e.message : String(e)));
+      return '';
+    }
+  }
+
   static async loadQuota(): Promise<QuotaWindow[]> {    const out: QuotaWindow[] = [];
     try {
       const store = await RdbHelper.getStore();
