@@ -111,6 +111,20 @@ const SCHEMA_STATEMENTS: string[] = [
      request_count INTEGER NOT NULL DEFAULT 0,
      updated_at TEXT NOT NULL
    );`,
+  // 本地累计历史的「天 × 模型」明细（来自官方 CSV 导出，支持 90d；用于更长期限的模型排行）
+  `CREATE TABLE IF NOT EXISTS console_history_model (
+     date TEXT NOT NULL,
+     model TEXT NOT NULL,
+     provider TEXT NOT NULL DEFAULT '',
+     requests INTEGER NOT NULL DEFAULT 0,
+     input_tokens INTEGER NOT NULL DEFAULT 0,
+     output_tokens INTEGER NOT NULL DEFAULT 0,
+     cache_read INTEGER NOT NULL DEFAULT 0,
+     cache_write INTEGER NOT NULL DEFAULT 0,
+     cost_usd REAL NOT NULL DEFAULT 0,
+     updated_at TEXT NOT NULL,
+     PRIMARY KEY (date, model)
+   );`,
 ];
 
 /** RDB 单例：建库建表，初始化单行表。getStore 单飞（并发首次调用共享同一次初始化），避免竞争抛错。 */

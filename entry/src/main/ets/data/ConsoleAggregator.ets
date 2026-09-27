@@ -4,6 +4,7 @@ import { BusinessError } from '@kit.BasicServicesKit';
 import { Constants } from '../common/constants/Constants';
 import { WebCookies } from '../common/utils/WebCookies';
 import { ConsoleSnapshotStore } from './ConsoleSnapshotStore';
+import { ConsoleCsv } from './ConsoleCsv';
 import type { Totals, ModelStat, DailyStat, TrendPoint, SessionStat, RecordRow, UsageAggregator } from '../model/Stats';
 
 /** 控制台用量通用字段（summary 与 models 条目共用）。 */
@@ -101,6 +102,16 @@ export class ConsoleAggregator implements UsageAggregator {
     const rows = await this.local.modelStats(period);
     if (rows.length > 0) {
       return rows;
+    }
+    // 「全部」：若本地累计历史已超出官方窗口（> 30 天），用历史明细汇总更长期限的排行
+    if (period === Constants.PERIOD_ALL) {
+      const days = await ConsoleSnapshotStore.historyDayCount();
+      if (days > 30) {
+        const hist = await ConsoleSnapshotStore.loadHistoryModelStats();
+        if (hist.length > 0) {
+          return hist;
+        }
+      }
     }
     const key = `m:${period}`;
     const json = await this.getJson(`/console/api/usage/models${ConsoleAggregator.rangeQuery(period)}`);
@@ -298,13 +309,69 @@ export class ConsoleAggregator implements UsageAggregator {
   }
 
   /**
-   * 主动把官方 30 天窗口的逐日数据并入本地历史。
+   * 用官方 CSV 导出（`/console/api/v2/usage/export`，支持 90d）回填本地历史。
+   *
+   * 比 JSON 接口强的地方：窗口 30d → **90d**，且给出「天 × 模型」的
+   * requests / input / output / cache 明细。成功返回 true，失败则由调用方退回 JSON 路径。
+   */
+  static async backfillFromCsv(token: string): Promise<boolean> {
+    const t = token.trim();
+    if (t === '') {
+      return false;
+    }
+    try {
+      const orgJson = await ConsoleAggregator.request('/console/api/orgs', '', t);
+      if (orgJson === null) {
+        return false;
+      }
+      let org = ConsoleAggregator.wsCache;
+      if (org === '') {
+        const orgs = JSON.parse(orgJson) as ConsoleOrgLite[];
+        for (const o of orgs) {
+          const id = o.id !== undefined ? o.id : '';
+          if (id !== '') {
+            org = id;
+            ConsoleAggregator.wsCache = id;
+            break;
+          }
+        }
+      }
+      if (org === '') {
+        return false;
+      }
+      const csv = await ConsoleAggregator.request('/console/api/v2/usage/export?range=90d', org, t);
+      if (csv === null) {
+        return false;
+      }
+      const rows = ConsoleCsv.parse(csv);
+      if (rows.length === 0) {
+        return false;
+      }
+      await ConsoleSnapshotStore.appendHistory(ConsoleCsv.aggregateByDay(rows));
+      await ConsoleSnapshotStore.appendHistoryModels(rows);
+      return true;
+    } catch (e) {
+      console.error('backfillFromCsv failed: ' + (e instanceof Error ? e.message : String(e)));
+      return false;
+    }
+  }
+
+  /**
+   * 主动把官方逐日数据并入本地历史（优先 CSV 90d，失败退回 JSON 30d）。
    *
    * 为什么需要：逐日数据只在「当前浏览的周期」被拉取，若用户只看「今天」，
    * 历史就攒不到整天。每次刷新（含自动刷新）都调用本方法，保证历史始终尽量完整，
    * 从而让滑出官方窗口的日期不会丢。
    */
   static async captureHistory(token: string): Promise<void> {
+    if (await ConsoleAggregator.backfillFromCsv(token)) {
+      return;
+    }
+    await ConsoleAggregator.captureHistoryJson(token);
+  }
+
+  /** JSON 兜底：把官方 30 天窗口的逐日数据并入本地历史。 */
+  static async captureHistoryJson(token: string): Promise<void> {
     const t = token.trim();
     if (t === '') {
       return;

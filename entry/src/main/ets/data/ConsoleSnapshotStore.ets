@@ -3,6 +3,7 @@ import { relationalStore } from '@kit.ArkData';
 import { RdbHelper } from './RdbHelper';
 import type { Totals, ModelStat, DailyStat } from '../model/Stats';
 import type { QuotaWindow } from '../model/UsageRecord';
+import type { CsvUsageRow } from './ConsoleCsv';
 
 /**
  * 官方聚合数据本地快照（离线可看）。
@@ -300,8 +301,7 @@ export class ConsoleSnapshotStore {
   }
 
   /** 本地累计历史的天数（界面提示用）。 */
-  static async historyDayCount(): Promise<number> {
-    try {
+  static async historyDayCount(): Promise<number> {    try {
       const store = await RdbHelper.getStore();
       const rs = await store.querySql('SELECT COUNT(*) AS c FROM console_history');
       let n = 0;
@@ -313,6 +313,82 @@ export class ConsoleSnapshotStore {
     } catch (e) {
       return 0;
     }
+  }
+
+  // ---- 「天 × 模型」历史明细（来自官方 CSV 导出，支持 90d）----
+
+  /** 并入「天 × 模型」明细：(date, model) 主键 upsert，重复取数不会存多份。 */
+  static async appendHistoryModels(rows: CsvUsageRow[]): Promise<void> {
+    if (rows.length === 0) {
+      return;
+    }
+    try {
+      const store = await RdbHelper.getStore();
+      const now = RdbHelper.nowIso();
+      // 批内去重：同一天同一模型只保留最后一次
+      const map = new Map<string, CsvUsageRow>();
+      for (const r of rows) {
+        if (r.day !== '' && r.model !== '') {
+          map.set(`${r.day}|${r.model}`, r);
+        }
+      }
+      for (const r of map.values()) {
+        await store.executeSql(
+          `INSERT OR REPLACE INTO console_history_model
+           (date, model, provider, requests, input_tokens, output_tokens, cache_read, cache_write, cost_usd, updated_at)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          [r.day, r.model, r.provider, r.requests, r.inputTokens, r.outputTokens,
+            r.cacheRead, r.cacheWrite, r.costUsd, now]);
+      }
+      const cutoff = new Date(Date.now() - 730 * 86400000).toISOString().substring(0, 10);
+      await store.executeSql('DELETE FROM console_history_model WHERE date < ?', [cutoff]);
+    } catch (e) {
+      console.error('appendHistoryModels failed: ' + (e instanceof Error ? e.message : String(e)));
+    }
+  }
+
+  /** 汇总整个本地历史（按模型），用于超出官方窗口的「全部」周期模型排行。 */
+  static async loadHistoryModelStats(): Promise<ModelStat[]> {
+    const out: ModelStat[] = [];
+    try {
+      const store = await RdbHelper.getStore();
+      const rs = await store.querySql(
+        `SELECT model,
+                SUM(requests) AS request_count,
+                SUM(input_tokens + cache_read + cache_write) AS total_input,
+                SUM(input_tokens) AS uncached_input,
+                SUM(cache_read) AS cache_read_sum,
+                SUM(cache_write) AS cache_write_sum,
+                SUM(output_tokens) AS output_tokens,
+                SUM(cost_usd) AS cost_usd
+         FROM console_history_model
+         GROUP BY model
+         ORDER BY (SUM(input_tokens + cache_read + cache_write) + SUM(output_tokens)) DESC`);
+      while (rs.goToNextRow()) {
+        const l = (n: string): number => rs.getLong(rs.getColumnIndex(n));
+        const d = (n: string): number => rs.getDouble(rs.getColumnIndex(n));
+        const hit = l('cache_read_sum');
+        const miss = l('uncached_input');
+        const denom = hit + miss;
+        out.push({
+          model: rs.getString(rs.getColumnIndex('model')),
+          requestCount: l('request_count'),
+          sessionCount: 0,
+          totalInputTokens: l('total_input'),
+          uncachedInputTokens: miss,
+          totalReasoningTokens: 0,
+          cacheHitTokens: hit,
+          cacheWriteTokens: l('cache_write_sum'),
+          totalOutputTokens: l('output_tokens'),
+          totalCostUsd: d('cost_usd'),
+          hitRate: denom > 0 ? Number(((hit / denom) * 100).toFixed(2)) : 0,
+        });
+      }
+      rs.close();
+    } catch (e) {
+      console.error('loadHistoryModelStats failed: ' + (e instanceof Error ? e.message : String(e)));
+    }
+    return out;
   }
 
   static async loadQuota(): Promise<QuotaWindow[]> {    const out: QuotaWindow[] = [];
