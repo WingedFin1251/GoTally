@@ -43,6 +43,12 @@ interface ConsoleStatusResponse {
   access?: ConsoleAccess;
 }
 
+/** 控制台 /console/api/orgs 返回项。 */
+interface ConsoleOrg {
+  id?: string;
+  name?: string;
+}
+
 interface QuotaPattern {
   label: string;
   pctFirst: RegExp;
@@ -272,6 +278,23 @@ export class OpenCodeApi {
     if (direct !== '') {
       return direct;
     }
+    // 新登录方式（控制台会话）优先：cookie 里已没有 auth，旧 server-fn 会 302 跳登录
+    try {
+      const cookie = OpenCodeApi.consoleCookie(token);
+      const orgs = await OpenCodeApi.fetchConsoleOrgs(cookie);
+      if (orgs.length > 0) {
+        const hintL = hint.trim().toLowerCase();
+        for (const o of orgs) {
+          if (o.id.toLowerCase() === hintL || o.name.toLowerCase() === hintL) {
+            return o.id;
+          }
+        }
+        return orgs[0].id;
+      }
+    } catch (e) {
+      console.error('resolveWorkspaceId via console orgs failed: ' + (e instanceof Error ? e.message : String(e)));
+    }
+    // 旧登录方式（auth cookie）兜底：工作区列表 server-fn
     const refs = await OpenCodeApi.fetchWorkspaceRefs(token);
     const hintL = hint.trim().toLowerCase();
     for (const ref of refs) {
@@ -280,6 +303,33 @@ export class OpenCodeApi {
       }
     }
     return refs[0].id;
+  }
+
+  /**
+   * 控制台工作区列表：`GET /console/api/orgs`（会话 cookie 鉴权）。
+   * 新登录方式下这是获取工作区 ID 的唯一可靠来源。
+   */
+  static async fetchConsoleOrgs(cookie: string): Promise<WorkspaceRef[]> {
+    if (cookie === '') {
+      return [];
+    }
+    const header: Record<string, string> = {
+      'Cookie': cookie,
+      'Accept': 'application/json',
+      'User-Agent': Constants.USER_AGENT,
+      'Origin': Constants.OPENCODE_ORIGIN,
+      'Referer': `${Constants.OPENCODE_ORIGIN}/console`,
+    };
+    const text = await OpenCodeApi.fetchJson(`${Constants.OPENCODE_ORIGIN}/console/api/orgs`, header);
+    const arr = JSON.parse(text) as ConsoleOrg[];
+    const out: WorkspaceRef[] = [];
+    for (const o of arr) {
+      const id = o.id !== undefined ? o.id : '';
+      if (id !== '') {
+        out.push({ id: id, name: o.name !== undefined ? o.name : '' });
+      }
+    }
+    return out;
   }
 
   /**
@@ -567,6 +617,13 @@ export class OpenCodeApi {
     const cookie = OpenCodeApi.buildCookieHeader(token);
     const text = await OpenCodeApi.fetchText(
       url, cookie, Constants.DEFAULT_USAGE_SERVER_ID, `/workspace/${workspaceId}/usage`);
+    // 新登录方式（控制台会话）下官方已更换鉴权，旧明细接口会重定向到登录页或返回未授权错误。
+    // 这里给出明确原因，避免「同步成功但 0 条」的误导。
+    const head = text.substring(0, 200);
+    if (head.includes('/auth/authorize') || text.includes('not associated with an account') ||
+      head.startsWith('<!DOCTYPE') || head.startsWith('<html')) {
+      throw new Error('当前登录方式无法读取明细（OpenCode 已更换接口），配额仍可正常显示');
+    }
     return OpenCodeApi.parseUsageResponse(text);
   }
 

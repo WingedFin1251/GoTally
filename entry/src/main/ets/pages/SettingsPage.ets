@@ -363,8 +363,8 @@ export struct SettingsPage {
   private async saveGoApiKey(): Promise<void> {
     const v = this.goApiKeyDraft.trim();
     try {
+      await SettingsStore.setGoApiKey(v);
       this.settings.goApiKey = v;
-      await SettingsStore.save(this.settings);
       this.goApiKeyDraft = v;
       this.showToastSafe(this.str(v === '' ? $r('app.string.go_api_key_cleared').id : $r('app.string.go_api_key_saved').id, ''));
     } catch (e) {

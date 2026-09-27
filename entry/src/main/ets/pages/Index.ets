@@ -159,9 +159,7 @@ struct Index {
       return;
     }
     try {
-      const s = await SettingsStore.getAll();
-      s.goApiKey = key;
-      await SettingsStore.save(s);
+      await SettingsStore.setGoApiKey(key);
       this.hasApiKey = true;
       this.authChecked = true;
     } catch (e) {

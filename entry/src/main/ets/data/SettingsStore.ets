@@ -113,6 +113,16 @@ export class SettingsStore {
     return (await SettingsStore.getAll()).goApiKey;
   }
 
+  /**
+   * 单独写 API Key。
+   *
+   * 刻意不放进 save()：设置页持有的是「加载时」的 AppSettings 快照，
+   * 若 save() 一并回写 goApiKey，任何一次改主题/光感等操作都可能把后设置的 Key 覆盖成空串。
+   */
+  static async setGoApiKey(key: string): Promise<void> {
+    await SettingsStore.put(SettingsKeys.GO_API_KEY, key.trim());
+  }
+
   static async put(key: string, value: preferences.ValueType): Promise<void> {
     try {
       const pref = await SettingsStore.getPref();
@@ -133,7 +143,7 @@ export class SettingsStore {
       await pref.put(SettingsKeys.CURRENCY, payload.currency);
       await pref.put(SettingsKeys.LANGUAGE, payload.language);
       await pref.put(SettingsKeys.GLOW_LEVEL, payload.glowLevel);
-      await pref.put(SettingsKeys.GO_API_KEY, payload.goApiKey);
+      // 注意：goApiKey 不在此处写入，改由 setGoApiKey 单独维护（避免被陈旧快照覆盖）
       await pref.flush();
     } catch (e) {
       throw e instanceof Error ? e : new Error(String(e));
