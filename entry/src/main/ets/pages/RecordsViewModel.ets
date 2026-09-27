@@ -1,6 +1,6 @@
 // entry/src/main/ets/pages/RecordsViewModel.ets
 import { DataProvider } from '../data/DataProvider';
-import type { SessionStat, RecordRow } from '../model/Stats';
+import type { SessionStat, RecordRow, ModelStat } from '../model/Stats';
 
 const SESSION_PAGE_SIZE = 10;
 const RECORD_PAGE_SIZE = 50;
@@ -18,6 +18,8 @@ export class RecordsViewModel {
   models: string[] = [];
   selectedModel = '';
   period: string = 'today';
+  /** 模型维度聚合（控制台登录下的主数据：官方无逐条明细，但按模型有聚合）。 */
+  modelStats: ModelStat[] = [];
 
   setPeriod(p: string): void {
     this.period = p;
@@ -48,5 +50,22 @@ export class RecordsViewModel {
   async setModel(m: string): Promise<void> {
     this.selectedModel = m;
     await this.loadRecords(1);
+  }
+
+  /**
+   * 模型维度数据：控制台登录下官方没有逐条明细，但提供按模型的聚合
+   * （来源：本地历史「天×模型」明细 / 官方 `/usage/models`，见 ConsoleAggregator）。
+   */
+  async loadModelStats(): Promise<void> {
+    const agg = DataProvider.getAggregator();
+    this.modelStats = await agg.modelStats(this.period);
+    // 模型筛选以聚合结果为准（本地明细为空时也能列出真实模型）
+    if (this.modelStats.length > 0) {
+      const names: string[] = [];
+      for (const m of this.modelStats) {
+        names.push(m.model);
+      }
+      this.models = names;
+    }
   }
 }

@@ -7,7 +7,7 @@ import { formatDateTimeShort, parseIso } from '../common/utils/TimeUtil';
 import { SettingsStore } from '../data/SettingsStore';
 import { OpenCodeApi } from '../network/OpenCodeApi';
 import { Constants } from '../common/constants/Constants';
-import type { SessionStat, RecordRow } from '../model/Stats';
+import type { SessionStat, RecordRow, ModelStat } from '../model/Stats';
 import { HdsNavigation, HdsNavDestination } from '@kit.UIDesignKit';
 import { buildTitleBar } from '../common/utils/NavTitleBar';
 
@@ -59,6 +59,8 @@ export struct RecordsPage {
     try {
       await this.vm.loadSessions(1);
       await this.vm.loadRecords(1);
+      // 模型维度聚合（控制台登录下这是官方能给的最细粒度）
+      await this.vm.loadModelStats();
     } catch (e) {
       // 首次加载失败（如 RDB 初始化竞争）时延迟重试一次，避免页面保持空白
       console.error('Records load failed: ' + (e instanceof Error ? e.message : String(e)));
@@ -98,6 +100,106 @@ export struct RecordsPage {
     }
     this.vm.setPeriod(period);
     this.reload();
+  }
+
+  /** 模型筛选后的列表（选择「全部模型」时返回全部）。 */
+  private filteredModelStats(): ModelStat[] {
+    if (this.vm.selectedModel === '') {
+      return this.vm.modelStats;
+    }
+    const out: ModelStat[] = [];
+    for (const m of this.vm.modelStats) {
+      if (m.model === this.vm.selectedModel) {
+        out.push(m);
+      }
+    }
+    return out;
+  }
+
+  /** 模型卡次行左侧：N 次请求 · 缓存读 X。 */
+  private modelMeta(m: ModelStat): string {
+    const req = this.str($r('app.string.requests_count').id, `${m.requestCount}`);
+    const cr = this.res($r('app.string.cache_read').id);
+    return `${req} · ${cr} ${formatTokensUi(m.cacheHitTokens)}`;
+  }
+
+  /**
+   * 模型用量卡：控制台登录下官方无逐条明细，但提供按模型的聚合
+   *（数据源：本地历史「天×模型」明细 / 官方 `/usage/models`）。
+   */
+  @Builder
+  ModelUsageCard() {
+    Column({ space: 8 }) {
+      Row() {
+        Text($r('app.string.model_usage')).fontSize(15).fontWeight(FontWeight.Bold)
+        Blank()
+        Select(this.modelOptions())
+          .selected(this.modelSelectIndex())
+          .value(this.vm.selectedModel === '' ? $r('app.string.all_models') : this.vm.selectedModel)
+          .font({ size: 12 })
+          .width(140)
+          .onSelect((index: number) => {
+            this.vm.setModel(index === 0 ? '' : this.vm.models[index - 1]);
+          })
+        Text(`${this.filteredModelStats().length}`)
+          .fontSize(11)
+          .fontColor($r('app.color.text_muted'))
+          .margin({ left: 10 })
+          .constraintSize({ minWidth: 24 })
+          .textAlign(TextAlign.End)
+      }
+      .width('100%')
+
+      if (this.filteredModelStats().length === 0) {
+        Text($r('app.string.list_empty_hint'))
+          .fontSize(12)
+          .fontColor($r('app.color.text_muted'))
+          .width('100%')
+          .textAlign(TextAlign.Center)
+          .padding({ top: 14, bottom: 14 })
+      } else {
+        ForEach(this.filteredModelStats(), (m: ModelStat) => {
+          Column({ space: 3 }) {
+            Row() {
+              Text(m.model)
+                .fontSize(13)
+                .fontColor($r('app.color.text_primary'))
+                .layoutWeight(1)
+                .maxLines(1)
+                .textOverflow({ overflow: TextOverflow.Ellipsis })
+                .onClick(() => { this.toast(m.model); })
+              Text(formatCost(m.totalCostUsd, this.currency, this.usdCny))
+                .fontSize(13)
+                .fontWeight(FontWeight.Medium)
+                .fontColor($r('app.color.accent'))
+                .margin({ left: 8 })
+            }
+            .width('100%')
+
+            Row() {
+              Text(this.modelMeta(m))
+                .fontSize(11)
+                .fontColor($r('app.color.text_muted'))
+                .layoutWeight(1)
+                .maxLines(1)
+                .textOverflow({ overflow: TextOverflow.Ellipsis })
+              Text(this.tokensTextOf(m.totalInputTokens, m.totalOutputTokens))
+                .fontSize(11)
+                .fontColor($r('app.color.text_secondary'))
+                .margin({ left: 8 })
+            }
+            .width('100%')
+          }
+          .width('100%')
+          .padding({ top: 7, bottom: 7 })
+          .border({ width: { bottom: 1 }, color: $r('app.color.divider') })
+        }, (m: ModelStat) => `${m.model}-${this.dataVersion}`)
+      }
+    }
+    .width('100%')
+    .padding(12)
+    .borderRadius(12)
+    .backgroundColor($r('app.color.bg_card'))
   }
 
   @Builder
@@ -396,9 +498,14 @@ export struct RecordsPage {
                 .backgroundColor($r('app.color.divider'))
             }
 
-            this.SessionsCard()
-            this.RecordsCard()
-          }
+            if (this.recordsUnavailable) {
+              // 官方已废弃逐条明细：改为按「模型维度」展示聚合数据
+              //（控制台登录下这是官方能提供的最细粒度）
+              this.ModelUsageCard()
+            } else {
+              this.SessionsCard()
+              this.RecordsCard()
+            }          }
           .width('100%')
           .constraintSize({ minHeight: '100%' })
           .padding({ left: 12, right: 12, top: this.statusBarHeight + 60, bottom: 96 })
