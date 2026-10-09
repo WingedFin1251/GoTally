@@ -117,7 +117,11 @@
     { "name": "start_full_sync", "value": "开始全量同步" },
 
     { "name": "set_appearance", "value": "外观" },
-    { "name": "theme_desc", "value": "亮色 / 深色" },
+    { "name": "theme_desc", "value": "不跟随时手动选择亮色 / 深色" },
+    { "name": "theme_follow_system", "value": "跟随系统" },
+    { "name": "theme_follow_system_desc", "value": "深色/浅色随系统设置自动切换" },
+    { "name": "on", "value": "已开启" },
+    { "name": "off", "value": "已关闭" },
     { "name": "currency", "value": "默认货币" },
     { "name": "currency_desc", "value": "费用主显示货币（实时汇率）" },
     { "name": "language", "value": "语言 / Language" },

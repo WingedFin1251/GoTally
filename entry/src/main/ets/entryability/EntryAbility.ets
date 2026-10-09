@@ -1,24 +1,57 @@
 // entry/src/main/ets/entryability/EntryAbility.ets
-import { AbilityConstant, ConfigurationConstant, UIAbility, Want } from '@kit.AbilityKit';
+import { AbilityConstant, Configuration, ConfigurationConstant, UIAbility, Want } from '@kit.AbilityKit';
 import { hilog } from '@kit.PerformanceAnalysisKit';
 import { window } from '@kit.ArkUI';
 import { AppContext } from '../common/AppContext';
 import { SettingsStore } from '../data/SettingsStore';
 import { DataProvider } from '../data/DataProvider';
+import { ThemeUtil } from '../common/utils/ThemeUtil';
 
 const DOMAIN = 0x0000;
 
 export default class EntryAbility extends UIAbility {
   onCreate(want: Want, launchParam: AbilityConstant.LaunchParam): void {
     AppContext.context = this.context;
-    try {
-      this.context.getApplicationContext().setColorMode(ConfigurationConstant.ColorMode.COLOR_MODE_NOT_SET);
-    } catch (err) {
-      hilog.error(DOMAIN, 'testTag', 'Failed to set colorMode. Cause: %{public}s', JSON.stringify(err));
-    }
+    this.applySystemThemeSnapshot();
+    this.applySavedTheme();
     this.applySavedLanguage();
     this.applySavedGlowLevel();
     hilog.info(DOMAIN, 'testTag', '%{public}s', 'Ability onCreate');
+  }
+
+  /** 系统深色状态写入 AppStorage（页面用它决定图标等资源用浅色还是深色那套）。 */
+  private applySystemThemeSnapshot(): void {
+    try {
+      const mode = this.context.config.colorMode;
+      AppStorage.setOrCreate('systemDark', ThemeUtil.systemDarkOf(mode));
+    } catch (e) {
+      hilog.warn(DOMAIN, 'testTag', 'Failed to read system color mode. Cause: %{public}s', String(e));
+      AppStorage.setOrCreate('systemDark', true);
+    }
+  }
+
+  /** 应用用户保存的主题模式：system 跟随系统，dark / light 强制。 */
+  private async applySavedTheme(): Promise<void> {
+    try {
+      const theme = await SettingsStore.getTheme();
+      AppStorage.setOrCreate('themeMode', theme);
+      this.context.getApplicationContext().setColorMode(ThemeUtil.colorModeOf(theme));
+    } catch (e) {
+      hilog.warn(DOMAIN, 'testTag', 'Failed to apply saved theme. Cause: %{public}s', String(e));
+    }
+  }
+
+  /**
+   * 系统配置变化（含系统深色模式切换）：更新 AppStorage，页面据此即时换图标/资源。
+   * 跟随系统时色彩模式由系统自动生效，这里只需刷新快照。
+   */
+  onConfigurationUpdate(newConfig: Configuration): void {
+    try {
+      AppStorage.setOrCreate('systemDark', ThemeUtil.systemDarkOf(newConfig.colorMode));
+      hilog.info(DOMAIN, 'testTag', 'onConfigurationUpdate colorMode=%{public}s', String(newConfig.colorMode));
+    } catch (e) {
+      hilog.warn(DOMAIN, 'testTag', 'onConfigurationUpdate failed. Cause: %{public}s', String(e));
+    }
   }
 
   /** 启动时应用用户保存的沉浸光感档位（供 HdsTabs 悬浮导航栏选择系统材质等级）。 */

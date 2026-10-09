@@ -9,6 +9,7 @@ import consoleCsvTest from './ConsoleCsv.test';
 import consoleIntradayTest from './ConsoleIntraday.test';
 import consoleLogsTest from './ConsoleLogs.test';
 import modelIconTest from './ModelIcon.test';
+import themeUtilTest from './ThemeUtil.test';
 
 export default function testsuite() {
   formatterTest();
@@ -22,4 +23,5 @@ export default function testsuite() {
   consoleIntradayTest();
   consoleLogsTest();
   modelIconTest();
+  themeUtilTest();
 }

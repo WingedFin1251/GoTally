@@ -33,7 +33,8 @@ const DEFAULT_SETTINGS: AppSettings = {
   syncIntervalSec: 300,
   windowDays: 60,
   autoSync: true,
-  theme: 'light',
+  // 新装默认跟随系统深色模式（老用户已存的值不受影响）
+  theme: 'system',
   currency: 'CNY',
   language: 'zh',
   glowLevel: 1,
@@ -106,6 +107,11 @@ export class SettingsStore {
 
   static async getGlowLevel(): Promise<number> {
     return (await SettingsStore.getAll()).glowLevel;
+  }
+
+  /** 主题模式：'system'（跟随系统）/ 'dark' / 'light'。 */
+  static async getTheme(): Promise<string> {
+    return (await SettingsStore.getAll()).theme;
   }
 
   /** 可选的 OpenCode Go API Key（空串表示未配置）。 */

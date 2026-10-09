@@ -8,7 +8,8 @@ import { SettingRow } from '../components/ui/SettingRow';
 import { SettingsCard } from '../components/ui/SettingsCard';
 import { formatDateTime, parseIso } from '../common/utils/TimeUtil';
 import { Constants } from '../common/constants/Constants';
-import { ConfigurationConstant, common } from '@kit.AbilityKit';
+import { ThemeUtil } from '../common/utils/ThemeUtil';
+import { common } from '@kit.AbilityKit';
 import { pasteboard } from '@kit.BasicServicesKit';
 import { setLanguage } from '../common/utils/Locale';
 import { AppInfo } from '../common/utils/AppInfo';
@@ -180,18 +181,23 @@ export struct SettingsPage {
   }
 
   @Builder
-  PillRow(key: string, options: PillOption[], onPick: (v: string) => void) {
+  PillRow(key: string, options: PillOption[], onPick: (v: string) => void, disabled: boolean = false) {
     Row({ space: 6 }) {
       ForEach(options, (opt: PillOption) => {
         Text(opt.label)
           .fontSize(11)
           .padding({ left: 8, right: 8, top: 4, bottom: 4 })
           .borderRadius(10)
-          .backgroundColor(this.settingCurrent(key) === opt.value ? $r('app.color.accent') : $r('app.color.divider'))
-          .fontColor(this.settingCurrent(key) === opt.value ? Color.White : $r('app.color.text_secondary'))
-          .onClick(() => onPick(opt.value))
+          .backgroundColor(this.settingCurrent(key) === opt.value && !disabled ? $r('app.color.accent') : $r('app.color.divider'))
+          .fontColor(this.settingCurrent(key) === opt.value && !disabled ? Color.White : $r('app.color.text_secondary'))
+          .onClick(() => {
+            if (!disabled) {
+              onPick(opt.value);
+            }
+          })
       }, (opt: PillOption) => opt.value)
     }
+    .opacity(disabled ? 0.4 : 1)
   }
 
   build() {
@@ -264,11 +270,18 @@ export struct SettingsPage {
 
         // 外观
         SettingsCard({ title: $r('app.string.set_appearance') }) {
+          // 跟随系统：开启时由系统深色模式决定；关闭后可自由选择深色/浅色
+          SettingRow({ title: $r('app.string.theme_follow_system'), desc: $r('app.string.theme_follow_system_desc') }) {
+            Toggle({ type: ToggleType.Switch, isOn: ThemeUtil.isFollowSystem(this.settings.theme) })
+              .selectedColor($r('app.color.accent'))
+              .onChange((isOn: boolean) => { this.onToggleFollowSystem(isOn); })
+          }
           SettingRow({ title: $r('app.string.theme'), desc: $r('app.string.theme_desc') }) {
             this.PillRow(
               'theme',
               [{ value: 'light', label: $r('app.string.light') }, { value: 'dark', label: $r('app.string.dark') }],
-              (v: string) => { this.settings.theme = v; SettingsStore.save(this.settings); this.applyTheme(v); })
+              (v: string) => { this.settings.theme = v; SettingsStore.save(this.settings); this.applyTheme(v); },
+              ThemeUtil.isFollowSystem(this.settings.theme))
           }
           SettingRow({ title: $r('app.string.currency'), desc: $r('app.string.currency_desc') }) {
             this.PillRow(
@@ -527,16 +540,34 @@ export struct SettingsPage {
   }
 
   private applyTheme(mode: string): void {
-    const colorMode = mode === 'dark'
-      ? ConfigurationConstant.ColorMode.COLOR_MODE_DARK
-      : ConfigurationConstant.ColorMode.COLOR_MODE_LIGHT;
+    // 写入 AppStorage：页面据此即时切换图标等资源（浅色/深色两套）
+    AppStorage.setOrCreate('themeMode', mode);
     try {
       const ctx = this.getUIContext().getHostContext();
       if (ctx !== undefined) {
-        ctx.getApplicationContext().setColorMode(colorMode);
+        ctx.getApplicationContext().setColorMode(ThemeUtil.colorModeOf(mode));
       }
     } catch (e) {
       console.error('applyTheme failed: ' + (e instanceof Error ? e.message : String(e)));
     }
+  }
+
+  /**
+   * 「跟随系统深色模式」开关。
+   *
+   * 打开 → 主题设为 `system`（色彩模式交回系统）；
+   * 关闭 → 按**当前实际外观**固化为 `dark` / `light`，避免关开关瞬间跳色。
+   */
+  private onToggleFollowSystem(isOn: boolean): void {
+    let mode = ThemeUtil.MODE_SYSTEM;
+    if (!isOn) {
+      const systemDark = AppStorage.get<boolean>('systemDark') === true;
+      mode = systemDark ? ThemeUtil.MODE_DARK : ThemeUtil.MODE_LIGHT;
+    }
+    this.settings.theme = mode;
+    SettingsStore.save(this.settings);
+    this.applyTheme(mode);
+    const label = this.str($r('app.string.theme_follow_system').id, '');
+    this.showToastSafe(isOn ? `${label}: ${this.str($r('app.string.on').id, '')}` : `${label}: ${this.str($r('app.string.off').id, '')}`);
   }
 }

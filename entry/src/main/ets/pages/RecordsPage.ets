@@ -8,6 +8,7 @@ import { formatDateTimeShort, parseIso } from '../common/utils/TimeUtil';
 import { SettingsStore } from '../data/SettingsStore';
 import { OpenCodeApi } from '../network/OpenCodeApi';
 import { Constants } from '../common/constants/Constants';
+import { ThemeUtil } from '../common/utils/ThemeUtil';
 import type { SessionStat, RecordRow, ModelStat } from '../model/Stats';
 import { HdsNavigation, HdsNavDestination } from '@kit.UIDesignKit';
 import { buildTitleBar } from '../common/utils/NavTitleBar';
@@ -30,8 +31,9 @@ export struct RecordsPage {
   @Watch('onSyncFinished') @StorageProp('syncFinishedVersion') syncFinishedVersion: number = 0;
   /** 模型汇总卡的筛选模型（'' = 全部模型；与「使用记录」的筛选互相独立）。 */
   @State summaryModel: string = '';
-  /** 当前主题是否深色：决定 gpt/grok/mimo 用彩色版图标（原版单色在深色下不可见）。 */
-  @State isDark: boolean = true;
+  /** 主题模式与系统深色状态（跟随系统时随系统变化，驱动图标浅/深两套切换）。 */
+  @StorageProp('themeMode') themeMode: string = ThemeUtil.MODE_SYSTEM;
+  @StorageProp('systemDark') systemDark: boolean = true;
   /** 数据版本号：每次重载完成 +1，作为 ForEach 键后缀强制列表行重建（避免复用旧闭包导致数值不刷新）。 */
   @State dataVersion: number = 0;
   private reloadRetried: boolean = false;
@@ -82,9 +84,6 @@ export struct RecordsPage {
   private async initCurrency(): Promise<void> {
     AppStorage.setOrCreate('currency', await SettingsStore.getCurrency());
     AppStorage.setOrCreate('usdCny', await OpenCodeApi.fetchUsdCny());
-    // 主题：决定模型图标用单色还是彩色版
-    const s = await SettingsStore.getAll();
-    this.isDark = s.theme !== 'light';
   }
 
   /** 「共 N 条」本地化：取模板后手动替换 {0}，避免个别版本 getStringSync 不执行占位符格式化。 */
@@ -108,6 +107,11 @@ export struct RecordsPage {
     }
     this.vm.setPeriod(period);
     this.reload();
+  }
+
+  /** 实际是否深色（跟随系统时取系统状态）——决定模型图标用浅色还是深色那一套。 */
+  private isDarkNow(): boolean {
+    return ThemeUtil.resolveDark(this.themeMode, this.systemDark);
   }
 
   /** 模型汇总卡：模型名 + 费用（含占比）/ 请求数 / 缓存读 / 输入·输出。 */
@@ -220,7 +224,7 @@ export struct RecordsPage {
         ForEach(this.filteredModelStats(), (m: ModelStat) => {
             Column({ space: 3 }) {
               Row() {
-                ModelIconView({ model: m.model, iconSize: 16, dark: this.isDark })
+                ModelIconView({ model: m.model, iconSize: 16, dark: this.isDarkNow() })
                   .margin({ right: 6 })
                 Text(m.model)
                   .fontSize(13)
@@ -474,7 +478,7 @@ export struct RecordsPage {
             Column({ space: 3 }) {
               Row() {
                 // 模型图标：品牌 SVG，未知模型显示首字母徽章
-                ModelIconView({ model: r.model, iconSize: 16, dark: this.isDark })
+                ModelIconView({ model: r.model, iconSize: 16, dark: this.isDarkNow() })
                   .margin({ right: 6 })
                 Text(r.model)
                   .fontSize(13)
@@ -593,4 +597,5 @@ export struct RecordsPage {
     .height('100%')
   }
 }
+
 

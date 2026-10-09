@@ -8,6 +8,7 @@ import { LineChart, LineSeries } from '../components/charts/LineChart';
 import { formatTokensUi, formatCost } from '../common/utils/Formatter';
 import { isZh } from '../common/utils/Locale';
 import { Constants } from '../common/constants/Constants';
+import { ThemeUtil } from '../common/utils/ThemeUtil';
 import { SettingsStore } from '../data/SettingsStore';
 import { OpenCodeApi } from '../network/OpenCodeApi';
 import type { Totals, ModelStat, DailyStat, TrendPoint } from '../model/Stats';
@@ -48,8 +49,9 @@ export struct StatsPage {
   /** 当前展示的是否为离线快照（网络不可用时的本地官方数据）。 */
   @StorageProp('consoleStale') consoleStale: boolean = false;
   @Watch('onSyncFinished') @StorageProp('syncFinishedVersion') syncFinishedVersion: number = 0;
-  /** 当前主题是否深色：决定模型图标（gpt/grok/mimo）用彩色版还是单色版。 */
-  @State isDark: boolean = true;
+  /** 主题模式与系统深色状态（跟随系统时随系统变化，驱动图标浅/深两套切换）。 */
+  @StorageProp('themeMode') themeMode: string = ThemeUtil.MODE_SYSTEM;
+  @StorageProp('systemDark') systemDark: boolean = true;
   private refreshRetried: boolean = false;
   /** 滚动联动：向下滚隐藏悬浮导航栏、向上滚显示（由 Index 播放 HDS 滚动动画）。 */
   onNavChanged?: (hide: boolean) => void;
@@ -110,15 +112,17 @@ export struct StatsPage {
   private async initCurrency(): Promise<void> {
     AppStorage.setOrCreate('currency', await SettingsStore.getCurrency());
     AppStorage.setOrCreate('usdCny', await OpenCodeApi.fetchUsdCny());
-    // 主题：决定模型图标用单色还是彩色版（gpt/grok/mimo 原版单色在深色下不可见）
-    const s = await SettingsStore.getAll();
-    this.isDark = s.theme !== 'light';
   }
 
   /**
    * 趋势图右上角标签：`09-12 → 09-27 · 15 天`（>30 天时补「含本地累计」）。
    * 「今天」周期是 24 小时逐时趋势，不显示区间。
    */
+  /** 实际是否深色（跟随系统时取系统状态）——决定模型图标用浅色还是深色那一套。 */
+  private isDarkNow(): boolean {
+    return ThemeUtil.resolveDark(this.themeMode, this.systemDark);
+  }
+
   /** 取字符串资源并按 {0} 替换参数（个别版本 getStringSync 不执行占位符格式化，故手动替换）。 */
   private str(id: number, arg: string): string {
     try {
@@ -313,7 +317,7 @@ export struct StatsPage {
             Row({ space: 6 }) {
               Text('●').fontSize(10).fontColor(this.modelColor(m.model))
               // 模型图标：品牌 SVG，未知模型显示首字母徽章
-              ModelIconView({ model: m.model, iconSize: 14, dark: this.isDark })
+              ModelIconView({ model: m.model, iconSize: 14, dark: this.isDarkNow() })
               Text(m.model).fontSize(12).fontColor($r('app.color.text_primary')).layoutWeight(1).maxLines(1)
                 .textOverflow({ overflow: TextOverflow.Ellipsis })
                 .onClick(() => { this.toast(m.model); })
@@ -500,3 +504,4 @@ export struct StatsPage {
     .height('100%')
   }
 }
+
