@@ -46,6 +46,8 @@
     { "name": "stats_title", "value": "Usage Stats" },
     { "name": "token_breakdown", "value": "Token Breakdown" },
     { "name": "model_usage", "value": "Model Usage" },
+    { "name": "model_summary", "value": "Model Summary" },
+    { "name": "models_total", "value": "{0} models total" },
     { "name": "usage_trend", "value": "Usage Trend" },
     { "name": "cost", "value": "Cost" },
     { "name": "requests", "value": "Requests" },

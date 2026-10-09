@@ -53,6 +53,8 @@
     { "name": "stats_title", "value": "用量统计" },
     { "name": "token_breakdown", "value": "Token 构成" },
     { "name": "model_usage", "value": "模型用量" },
+    { "name": "model_summary", "value": "模型汇总" },
+    { "name": "models_total", "value": "合计 {0} 个模型" },
     { "name": "usage_trend", "value": "用量趋势" },
     { "name": "cost", "value": "成本" },
     { "name": "requests", "value": "请求" },

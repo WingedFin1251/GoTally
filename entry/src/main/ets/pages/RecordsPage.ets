@@ -27,6 +27,8 @@ export struct RecordsPage {
   /** 页面滚动控制器：绑定给 HDS 标题栏，驱动「内容滚入栏下渐变模糊」。 */
   private scroller: Scroller = new Scroller();
   @Watch('onSyncFinished') @StorageProp('syncFinishedVersion') syncFinishedVersion: number = 0;
+  /** 模型汇总卡的筛选模型（'' = 全部模型；与「使用记录」的筛选互相独立）。 */
+  @State summaryModel: string = '';
   /** 数据版本号：每次重载完成 +1，作为 ForEach 键后缀强制列表行重建（避免复用旧闭包导致数值不刷新）。 */
   @State dataVersion: number = 0;
   private reloadRetried: boolean = false;
@@ -102,18 +104,59 @@ export struct RecordsPage {
     this.reload();
   }
 
-  /** 模型筛选后的列表（选择「全部模型」时返回全部）。 */
+  /** 模型汇总卡：模型名 + 费用（含占比）/ 请求数 / 缓存读 / 输入·输出。 */
   private filteredModelStats(): ModelStat[] {
-    if (this.vm.selectedModel === '') {
+    if (this.summaryModel === '') {
       return this.vm.modelStats;
     }
     const out: ModelStat[] = [];
     for (const m of this.vm.modelStats) {
-      if (m.model === this.vm.selectedModel) {
+      if (m.model === this.summaryModel) {
         out.push(m);
       }
     }
     return out;
+  }
+
+  /** 模型名列表（汇总卡筛选用，顺序与 modelStats 一致）。 */
+  private modelNames(): string[] {
+    const out: string[] = [];
+    for (const m of this.vm.modelStats) {
+      out.push(m.model);
+    }
+    return out;
+  }
+
+  private summaryOptions(): SelectOption[] {
+    const out: SelectOption[] = [{ value: $r('app.string.all_models') }];
+    for (const n of this.modelNames()) {
+      out.push({ value: n });
+    }
+    return out;
+  }
+
+  private summarySelectIndex(): number {
+    const idx = this.modelNames().indexOf(this.summaryModel);
+    return idx >= 0 ? idx + 1 : 0;
+  }
+
+  /** 当前筛选下的费用合计（未筛选时即所选周期的全部额度）。 */
+  private summaryTotalCost(): number {
+    let sum = 0;
+    for (const m of this.filteredModelStats()) {
+      sum += m.totalCostUsd;
+    }
+    return sum;
+  }
+
+  /** 该模型占当前合计的比例（用于费用行后缀）。 */
+  private costShare(m: ModelStat): string {
+    const total = this.summaryTotalCost();
+    if (total <= 0) {
+      return '';
+    }
+    const pct = (m.totalCostUsd / total) * 100;
+    return ` · ${pct.toFixed(1)}%`;
   }
 
   /** 模型卡次行左侧：N 次请求 · 缓存读 X。 */
@@ -124,31 +167,41 @@ export struct RecordsPage {
   }
 
   /**
-   * 模型用量卡：控制台登录下官方无逐条明细，但提供按模型的聚合
-   *（数据源：本地历史「天×模型」明细 / 官方 `/usage/models`）。
+   * 模型汇总卡：按模型看「总共用了多少额度」（费用/请求数/缓存读/输入输出），
+   * 数据源为本地历史「天×模型」明细或官方 `/usage/models`，随顶部周期联动；
+   * 卡内筛选与下方「使用记录」的筛选互相独立。
    */
   @Builder
   ModelUsageCard() {
     Column({ space: 8 }) {
       Row() {
-        Text($r('app.string.model_usage')).fontSize(15).fontWeight(FontWeight.Bold)
+        Text($r('app.string.model_summary')).fontSize(15).fontWeight(FontWeight.Bold)
         Blank()
-        Select(this.modelOptions())
-          .selected(this.modelSelectIndex())
-          .value(this.vm.selectedModel === '' ? $r('app.string.all_models') : this.vm.selectedModel)
+        Select(this.summaryOptions())
+          .selected(this.summarySelectIndex())
+          .value(this.summaryModel === '' ? $r('app.string.all_models') : this.summaryModel)
           .font({ size: 12 })
           .width(140)
           .onSelect((index: number) => {
-            this.vm.setModel(index === 0 ? '' : this.vm.models[index - 1]);
+            this.summaryModel = index === 0 ? '' : this.modelNames()[index - 1];
           })
-        Text(`${this.filteredModelStats().length}`)
-          .fontSize(11)
-          .fontColor($r('app.color.text_muted'))
-          .margin({ left: 10 })
-          .constraintSize({ minWidth: 24 })
-          .textAlign(TextAlign.End)
       }
       .width('100%')
+
+      // 合计行：N 个模型的总额度（选择单个模型时即该模型总额）
+      Row() {
+        Text(this.str($r('app.string.models_total').id, `${this.filteredModelStats().length}`))
+          .fontSize(11)
+          .fontColor($r('app.color.text_muted'))
+        Blank()
+        Text(formatCost(this.summaryTotalCost(), this.currency, this.usdCny))
+          .fontSize(13)
+          .fontWeight(FontWeight.Medium)
+          .fontColor($r('app.color.accent'))
+      }
+      .width('100%')
+      .padding({ bottom: 6 })
+      .border({ width: { bottom: 1 }, color: $r('app.color.divider') })
 
       if (this.filteredModelStats().length === 0) {
         Text($r('app.string.list_empty_hint'))
@@ -168,7 +221,7 @@ export struct RecordsPage {
                 .maxLines(1)
                 .textOverflow({ overflow: TextOverflow.Ellipsis })
                 .onClick(() => { this.toast(m.model); })
-              Text(formatCost(m.totalCostUsd, this.currency, this.usdCny))
+              Text(formatCost(m.totalCostUsd, this.currency, this.usdCny) + this.costShare(m))
                 .fontSize(13)
                 .fontWeight(FontWeight.Medium)
                 .fontColor($r('app.color.accent'))
@@ -498,14 +551,11 @@ export struct RecordsPage {
                 .backgroundColor($r('app.color.divider'))
             }
 
-            if (this.recordsUnavailable) {
-              // 官方已废弃逐条明细：改为按「模型维度」展示聚合数据
-              //（控制台登录下这是官方能提供的最细粒度）
-              this.ModelUsageCard()
-            } else {
-              this.SessionsCard()
-              this.RecordsCard()
-            }          }
+            // 模型汇总：一眼看出每个模型总共用了多少额度（与下方「使用记录」的筛选互相独立）
+            this.ModelUsageCard()
+            this.SessionsCard()
+            this.RecordsCard()
+          }
           .width('100%')
           .constraintSize({ minHeight: '100%' })
           .padding({ left: 12, right: 12, top: this.statusBarHeight + 60, bottom: 96 })
