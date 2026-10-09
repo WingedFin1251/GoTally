@@ -44,9 +44,10 @@ export default function openCodeApiTest() {
       expect(records[1].sessionId).assertEqual('');
     });
     it('buildCookieHeader', 0, () => {
-      // 裸值按历史行为当作 auth 的值
-      expect(OpenCodeApi.buildCookieHeader('abc123')).assertEqual('auth=abc123');
-      expect(OpenCodeApi.buildCookieHeader('Cookie: abc123')).assertEqual('auth=abc123');
+      // 裸值：Fe26... 是旧版 auth cookie，其余按新版控制台会话 cookie 处理
+      expect(OpenCodeApi.buildCookieHeader('Fe26.2**deadbeef')).assertEqual('auth=Fe26.2**deadbeef');
+      expect(OpenCodeApi.buildCookieHeader('Cookie: Fe26.2**deadbeef')).assertEqual('auth=Fe26.2**deadbeef');
+      expect(OpenCodeApi.buildCookieHeader('st_abc123')).assertEqual('__Host-console_session=st_abc123');
       // 已是完整 cookie 串则原样透传（新登录方式是 provider/authorization/__Host-console_session，没有 auth）
       expect(OpenCodeApi.buildCookieHeader('Cookie: foo=1; auth=xyz')).assertEqual('foo=1; auth=xyz');
       expect(OpenCodeApi.buildCookieHeader('provider=p; __Host-console_session=s'))

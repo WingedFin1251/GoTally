@@ -18,6 +18,13 @@ export class Constants {
     'bfd684bfc2e4eed05cd0b518f5e4eafd3f3376e3938abb9e536e7c03df831e5c';
   static readonly USER_AGENT: string =
     'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) Gecko/20100101 Firefox/148.0';
+  /** 控制台 JSON 接口使用桌面 UA（与网页端一致，降低被判为非浏览器请求的概率）。 */
+  static readonly DESKTOP_USER_AGENT: string =
+    'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/141.0.0.0 Safari/537.36';
+  /** 控制台逐条明细接口 `limit` 上限（实测 101 会返回 400）。 */
+  static readonly CONSOLE_LOGS_MAX_LIMIT: number = 100;
+  /** 增量同步的重叠窗口：从本地最新记录往前多取 1 小时，防止边界漏记。 */
+  static readonly INCREMENTAL_OVERLAP_MS: number = 3600 * 1000;
   static readonly AUTH_HEADER_PREFIX: string = 'auth=';
   static readonly REQUEST_TIMEOUT_MS: number = 30000;
   static readonly MAX_BODY_BYTES: number = 4 * 1024 * 1024;

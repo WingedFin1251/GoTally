@@ -13,6 +13,52 @@ interface GoUsageWindow {
   resetsAt?: string;
 }
 
+/** /console/api/request-logs 的单条请求（只取所需字段；数字可能与字符串混用）。 */
+interface ConsoleLogItem {
+  id?: string;
+  startedAt?: number | string;
+  category?: string;
+  model?: string | null;
+  provider?: string | null;
+  sessionID?: string | null;
+  serviceAPIKeyID?: string | null;
+  product?: string | null;
+  inputTokens?: number | string;
+  outputTokens?: number | string;
+  reasoningTokens?: number | string;
+  cacheReadTokens?: number | string;
+  cacheWriteTokens?: number | string;
+  cost?: number | string;
+}
+
+interface ConsoleLogsResponse {
+  items?: ConsoleLogItem[];
+  nextCursor?: string;
+  retentionDays?: number | string;
+}
+
+/** /console/api/request-logs 的一页结果。 */
+export interface ConsoleUsagePage {
+  records: UsageRecord[];
+  nextCursor: string;
+  /** 服务端明细保留天数（实测 30）。 */
+  retentionDays: number;
+}
+
+/** /console/api/service-accounts 的 Key 条目。 */
+interface ServiceAccountEntry {
+  keys?: ServiceAccountKey[];
+}
+
+interface ServiceAccountKey {
+  id?: string;
+  name?: string;
+}
+
+interface ServiceAccountsResponse {
+  items?: ServiceAccountEntry[];
+}
+
 interface GoUsageBlock {
   rolling?: GoUsageWindow;
   weekly?: GoUsageWindow;
@@ -143,8 +189,11 @@ export class OpenCodeApi {
         return cookie;
       }
     }
-    // 仅有裸值：按历史行为当作 auth 的值
-    return `auth=${cookie}`;
+    // 仅有裸值：`Fe26...` 是旧版 auth cookie，其余按新版控制台会话 cookie 处理
+    if (cookie.startsWith('Fe26')) {
+      return `auth=${cookie}`;
+    }
+    return `${Constants.CONSOLE_COOKIE_NAME}=${cookie}`;
   }
 
   static buildLoginUrl(): string {
@@ -591,6 +640,13 @@ export class OpenCodeApi {
     if (cookie === '' || ws === '') {
       return [];
     }
+    // 控制台会话（工作区为 wrk_xxx）：优先 JSON 接口，失败再退回 HTML 抓取
+    if (ws.startsWith('wrk_')) {
+      const fromJson = await OpenCodeApi.fetchKeyNamesConsole(token, ws);
+      if (fromJson.length > 0) {
+        return fromJson;
+      }
+    }
     const url = `https://opencode.ai/workspace/${encodeURIComponent(ws)}/keys`;
     try {
       const html = await OpenCodeApi.fetchText(url, cookie, '', `/workspace/${ws}/keys`);
@@ -612,6 +668,152 @@ export class OpenCodeApi {
       console.error('fetchKeyNames failed: ' + (e instanceof Error ? e.message : String(e)));
       return [];
     }
+  }
+
+  /**
+   * 控制台逐条明细：`GET /console/api/request-logs`（游标分页，服务端保留 30 天）。
+   *
+   * 背景：2026-09 控制台改版后旧的 `/_server` 明细 server-fn 失效，但该接口可用，
+   * 且给出每条请求的 model / provider / sessionID / Key / tokens（含推理）/ cost，
+   * 因此记录页明细、会话数、逐小时趋势、Key 归属都能恢复正常。
+   */
+  static async fetchConsoleUsagePage(token: string, orgId: string, cursor: string,
+    limit: number, sinceMs: number): Promise<ConsoleUsagePage> {
+    const size = Math.max(1, Math.min(limit, Constants.CONSOLE_LOGS_MAX_LIMIT));
+    let url = `${Constants.OPENCODE_ORIGIN}/console/api/request-logs?limit=${size}`;
+    if (cursor !== '') {
+      url += `&cursor=${encodeURIComponent(cursor)}`;
+    }
+    if (sinceMs > 0) {
+      url += `&since=${Math.floor(sinceMs)}`;
+    }
+    const text = await OpenCodeApi.fetchJson(url, OpenCodeApi.consoleHeaders(token, orgId));
+    return OpenCodeApi.parseConsoleRequestLogs(text);
+  }
+
+  /** 控制台接口请求头：会话 cookie + `x-org-id`（工作区）。 */
+  private static consoleHeaders(token: string, orgId: string): Record<string, string> {
+    const headers: Record<string, string> = {
+      'Cookie': OpenCodeApi.buildCookieHeader(token),
+      'Accept': 'application/json',
+      'User-Agent': Constants.DESKTOP_USER_AGENT,
+      'Origin': Constants.OPENCODE_ORIGIN,
+      'Referer': `${Constants.OPENCODE_ORIGIN}/console/`,
+    };
+    if (orgId.trim() !== '') {
+      headers['x-org-id'] = orgId.trim();
+    }
+    return headers;
+  }
+
+  /**
+   * 解析 `/console/api/request-logs` 响应（纯函数，便于回归测试）。
+   *
+   * 只保留 `category === "inference"` 的推理请求 —— 另一类 `"api"` 是控制台
+   * 自身的接口调用，不计入用量（若混入会虚增请求数与成本）。
+   */
+  static parseConsoleRequestLogs(body: string): ConsoleUsagePage {
+    const records: UsageRecord[] = [];
+    let nextCursor = '';
+    let retentionDays = 0;
+    try {
+      const data = JSON.parse(body) as ConsoleLogsResponse;
+      const items = data.items;
+      if (items !== undefined) {
+        const now = new Date().toISOString();
+        for (const it of items) {
+          const category = it.category !== undefined ? it.category : '';
+          if (category !== 'inference') {
+            continue;
+          }
+          const id = it.id !== undefined ? it.id : '';
+          const startedAt = OpenCodeApi.numOr0(it.startedAt);
+          if (id === '' || startedAt <= 0) {
+            continue;
+          }
+          const costUsd = OpenCodeApi.numOf(it.cost);
+          records.push({
+            usgId: id,
+            createdAt: new Date(startedAt).toISOString(),
+            model: OpenCodeApi.strOf(it.model),
+            provider: OpenCodeApi.strOf(it.provider),
+            inputTokens: OpenCodeApi.numOr0(it.inputTokens),
+            outputTokens: OpenCodeApi.numOr0(it.outputTokens),
+            reasoningTokens: OpenCodeApi.numOr0(it.reasoningTokens),
+            cacheReadTokens: OpenCodeApi.numOr0(it.cacheReadTokens),
+            // 新接口不再区分 5m/1h 缓存写入，合计口径不变
+            cacheWrite5mTokens: OpenCodeApi.numOr0(it.cacheWriteTokens),
+            cacheWrite1hTokens: 0,
+            costRaw: Math.round(costUsd * 1e8),
+            costUsd: costUsd,
+            keyId: OpenCodeApi.strOf(it.serviceAPIKeyID),
+            sessionId: OpenCodeApi.strOf(it.sessionID),
+            plan: OpenCodeApi.strOf(it.product),
+            syncedAt: now,
+          });
+        }
+      }
+      if (data.nextCursor !== undefined && data.nextCursor !== null) {
+        nextCursor = data.nextCursor;
+      }
+      retentionDays = OpenCodeApi.numOr0(data.retentionDays);
+    } catch (e) {
+      console.error('parseConsoleRequestLogs failed: ' + (e instanceof Error ? e.message : String(e)));
+    }
+    return { records: records, nextCursor: nextCursor, retentionDays: retentionDays };
+  }
+
+  /** 控制台 Key 名称：`GET /console/api/service-accounts`（JSON，优于 HTML 抓取）。 */
+  static async fetchKeyNamesConsole(token: string, orgId: string): Promise<KeyNamePair[]> {
+    const out: KeyNamePair[] = [];
+    if (orgId.trim() === '') {
+      return out;
+    }
+    try {
+      const url = `${Constants.OPENCODE_ORIGIN}/console/api/service-accounts`;
+      const text = await OpenCodeApi.fetchJson(url, OpenCodeApi.consoleHeaders(token, orgId));
+      const data = JSON.parse(text) as ServiceAccountsResponse;
+      const items = data.items;
+      if (items === undefined) {
+        return out;
+      }
+      const seen = new Set<string>();
+      for (const entry of items) {
+        const keys = entry.keys;
+        if (keys === undefined) {
+          continue;
+        }
+        for (const k of keys) {
+          const id = k.id !== undefined ? k.id : '';
+          const name = k.name !== undefined ? k.name.trim() : '';
+          if (id !== '' && name !== '' && !seen.has(id)) {
+            seen.add(id);
+            out.push({ keyId: id, name: name });
+          }
+        }
+      }
+    } catch (e) {
+      console.error('fetchKeyNamesConsole failed: ' + (e instanceof Error ? e.message : String(e)));
+    }
+    return out;
+  }
+
+  /** 字符串兜底：接口可能返回 null，统一成空串（DB 里 model 等列是 NOT NULL）。 */
+  private static strOf(v: string | null | undefined): string {
+    return v === undefined || v === null ? '' : v;
+  }
+
+  /** 数值兜底：接口可能返回数字或数字字符串，统一转成 number。 */
+  private static numOf(v: number | string | undefined): number {
+    if (v === undefined || v === null) {
+      return 0;
+    }
+    const n = typeof v === 'number' ? v : Number(v);
+    return Number.isFinite(n) ? n : 0;
+  }
+
+  private static numOr0(v: number | string | undefined): number {
+    return OpenCodeApi.numOf(v);
   }
 
   static async fetchUsagePage(token: string, workspaceId: string, page: number = 0, keyId: string = ''): Promise<UsageRecord[]> {

@@ -374,14 +374,21 @@ export class ConsoleAggregator implements UsageAggregator {
       await ConsoleSnapshotStore.appendHistoryModels(rows);
       // 今日趋势采样：CSV 中「今天」的各模型行相加即为当日累计值（无需额外请求），
       // 这样即使用户停留在别的页面，小时级曲线也能持续累积。
-      const today = ConsoleIntraday.localDay(new Date());
+      // 注意用 **CSV 里最新的一天**（服务器侧日期）作为归属日：设备时钟若不准，
+      // 按本地日期归类会把采样落到错误的日期，导致「今日趋势」对不上 KPI。
+      let serverDay = '';
+      for (const r of rows) {
+        if (r.day > serverDay) {
+          serverDay = r.day;
+        }
+      }
       let inSum = 0;
       let outSum = 0;
       let reqSum = 0;
       let costSum = 0;
       let hasToday = false;
       for (const r of rows) {
-        if (r.day === today) {
+        if (r.day === serverDay) {
           hasToday = true;
           inSum += r.inputTokens + r.cacheRead + r.cacheWrite;
           outSum += r.outputTokens;
@@ -390,7 +397,7 @@ export class ConsoleAggregator implements UsageAggregator {
         }
       }
       if (hasToday) {
-        await ConsoleSnapshotStore.appendIntradaySample(inSum, outSum, reqSum, costSum, Date.now());
+        await ConsoleSnapshotStore.appendIntradaySample(inSum, outSum, reqSum, costSum, Date.now(), serverDay);
       }
       return true;
     } catch (e) {

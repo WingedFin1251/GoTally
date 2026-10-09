@@ -1,6 +1,8 @@
 // entry/src/main/ets/network/SyncManager.ets
 import { Constants } from '../common/constants/Constants';
 import { ConsoleAggregator } from '../data/ConsoleAggregator';
+import { OpenCodeApi } from './OpenCodeApi';
+import type { ConsoleUsagePage } from './OpenCodeApi';
 import type { UsageStore } from '../data/UsageStore';
 import type { UsageFetcher } from './UsageFetcher';
 import type { UsageRecord } from '../model/UsageRecord';
@@ -119,21 +121,21 @@ export class SyncManager {
           return this.finish({ ok: false, error: msg });
         }
       }
-      // 新登录方式（控制台会话，cookie 里已无 auth）下官方已废弃逐条明细接口：
-      // 「同步」改为刷新官方聚合数据（使缓存失效并广播刷新），
-      // 不再做必然为 0 的明细分页拉取（否则用户看到「同步 0 条 + 报错」）。
+      const windowDays = await this.store.getWindowDays();
+      // 控制台会话（cookie 里已无 auth）：明细走新接口 `/console/api/request-logs`
+      //（旧 `/_server` 明细 server-fn 已失效，不再是「没有明细」——新接口可用）
       if (!token.includes('auth=')) {
+        const consoleInserted = await this.syncConsoleDetail(workspaceId, token, mode, windowDays);
         await this.refreshKeyNames(workspaceId, token);
+        // 官方聚合数据与历史同步刷新（配额/总览/趋势 + 90 天历史 + 离线快照）
         ConsoleAggregator.invalidate();
-        // 主动把官方 30 天窗口并入本地历史：保证滑出窗口的日期不丢（历史越用越长）
         await ConsoleAggregator.captureHistory(token);
-        await this.store.updateSyncState('ok', '', 0);
-        this.progress.inserted = 0;
-        this.setPhase('done', '已刷新官方数据');
-        return this.finish({ ok: true, inserted: 0 });
+        await this.store.updateSyncState('ok', '', consoleInserted);
+        this.progress.inserted = consoleInserted;
+        this.setPhase('done', `已同步 ${consoleInserted} 条明细`);
+        return this.finish({ ok: true, inserted: consoleInserted });
       }
 
-      const windowDays = await this.store.getWindowDays();
       const maxPages = mode === 'full' ? Constants.MAX_FULL_PAGES : Constants.INCREMENTAL_PAGES;
       let totalInserted = 0;
       let failedPages = 0;
@@ -223,6 +225,72 @@ export class SyncManager {
       this.setPhase('error', msg);
       return this.finish({ ok: false, error: msg });
     }
+  }
+
+  /**
+   * 控制台会话下的逐条明细同步（`GET /console/api/request-logs`）。
+   *
+   * 与旧接口的差异：**游标分页**（按时间倒序，不能并发跳页）、单页上限 100 条、
+   * 服务端只保留 30 天明细；增量同步用 `since`（本地最新记录往前留 1 小时重叠防边界漏记）。
+   * 命中不到更早的数据就停止翻页，既快又省请求。
+   */
+  private async syncConsoleDetail(workspaceId: string, token: string, mode: string,
+    windowDays: number | null): Promise<number> {
+    const maxPages = mode === 'full' ? Constants.MAX_FULL_PAGES : Constants.INCREMENTAL_PAGES;
+    let sinceMs = 0;
+    if (mode !== 'full') {
+      const state = await this.store.getSyncState();
+      if (state.newestRecordAt !== '') {
+        const ms = Date.parse(state.newestRecordAt) - Constants.INCREMENTAL_OVERLAP_MS;
+        sinceMs = Number.isNaN(ms) || ms <= 0 ? 0 : ms;
+      }
+    }
+    // 同步窗口边界（0 表示不限，交由官方 30 天保留期约束）
+    const boundaryMs = windowDays !== null && windowDays > 0 ? Date.now() - windowDays * 86400000 : 0;
+    let cursor = '';
+    let page = 0;
+    let inserted = 0;
+    while (page < maxPages) {
+      this.progress.page = page;
+      this.onProgress(this.getProgress());
+      let pageData: ConsoleUsagePage;
+      try {
+        pageData = await OpenCodeApi.fetchConsoleUsagePage(token, workspaceId, cursor,
+          Constants.CONSOLE_LOGS_MAX_LIMIT, sinceMs);
+      } catch (e) {
+        const msg = e instanceof Error ? e.message : String(e);
+        console.error(`console detail page ${page} failed: ${msg}`);
+        break;
+      }
+      if (pageData.records.length === 0) {
+        break;
+      }
+      // 记录按时间倒序返回：早于同步窗口边界的丢弃，并停止继续翻页
+      const keep: UsageRecord[] = [];
+      let reachedBoundary = false;
+      for (const r of pageData.records) {
+        const t = Date.parse(r.createdAt);
+        if (boundaryMs > 0 && !Number.isNaN(t) && t < boundaryMs) {
+          reachedBoundary = true;
+          continue;
+        }
+        keep.push(r);
+      }
+      if (keep.length > 0) {
+        inserted += await this.store.insertUsageRecords(keep);
+        this.progress.inserted = inserted;
+        this.onProgress(this.getProgress());
+      }
+      if (reachedBoundary || pageData.nextCursor === '') {
+        break;
+      }
+      cursor = pageData.nextCursor;
+      page++;
+    }
+    if (windowDays !== null && windowDays > 0) {
+      await this.store.pruneOldRecords(windowDays);
+    }
+    return inserted;
   }
 
   private async fetchOne(workspaceId: string, page: number): Promise<UsageRecordOrError> {

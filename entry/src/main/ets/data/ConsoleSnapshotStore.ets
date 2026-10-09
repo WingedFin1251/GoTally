@@ -419,13 +419,16 @@ export class ConsoleSnapshotStore {
    *
    * 去重：`ts_min`（epoch 分钟）为主键，同一分钟内多次刷新只保留最后一次，
    * 因此不会「存多份」；超过 7 天的采样行会被清理。
+   *
+   * `serverDay` 可显式传入**服务器侧日期**（如 CSV 里最新的一天）：
+   * 设备系统时间若不准（实测有过偏差），按本地日期归类会把采样落到错误的日期。
    */
   static async appendIntradaySample(input: number, output: number, requests: number,
-    costUsd: number, atMs: number): Promise<void> {
+    costUsd: number, atMs: number, serverDay: string = ''): Promise<void> {
     try {
       const store = await RdbHelper.getStore();
       const tsMin = ConsoleIntraday.toTsMin(atMs);
-      const day = ConsoleIntraday.localDay(new Date(atMs));
+      const day = serverDay !== '' ? serverDay : ConsoleIntraday.localDay(new Date(atMs));
       await store.executeSql(
         `INSERT OR REPLACE INTO console_intraday
          (ts_min, day, input_tokens, output_tokens, request_count, cost_usd, updated_at)

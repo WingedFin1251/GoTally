@@ -191,10 +191,9 @@ struct Index {
       this.loggedIn = token.trim() !== '';
       this.hasApiKey = (await SettingsStore.getGoApiKey()).trim() !== '';
       AppStorage.setOrCreate('hasToken', this.loggedIn);
-      // 新登录方式（控制台会话）不再下发 auth cookie，旧的逐条明细接口对其无效：
-      // 记录页据此给出说明，统计/总览仍由控制台聚合接口提供数据。
-      const t = token.trim();
-      AppStorage.setOrCreate('recordsUnavailable', this.loggedIn && t !== '' && !t.includes('auth='));
+      // 逐条明细：旧登录走 `/_server`，控制台会话走 `/console/api/request-logs`
+      //（两条链路都可用），因此不再有「无法读取明细」的登录方式。
+      AppStorage.setOrCreate('recordsUnavailable', false);
     } catch (e) {
       console.error('checkLogin failed: ' + (e instanceof Error ? e.message : String(e)));
     } finally {

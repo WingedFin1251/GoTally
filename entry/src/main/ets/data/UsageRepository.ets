@@ -184,15 +184,21 @@ export class UsageRepository implements UsageDataStore {
       const store = await RdbHelper.getStore();
       const syncedAt = RdbHelper.nowIso();
       let inserted = 0;
+      let skipped = 0;
       for (const rec of records) {
+        if (rec.usgId === '' || rec.createdAt === '') {
+          skipped += 1;
+          continue;
+        }
         const existing = await store.querySql('SELECT 1 FROM usage_records WHERE usg_id = ?', [rec.usgId]);
         const existed = existing.goToFirstRow();
         existing.close();
+        // 接口字段可能为 null：统一兜成空串，避免 NOT NULL 列写入失败
         const values: relationalStore.ValuesBucket = {
           'usg_id': rec.usgId,
           'created_at': toCanonicalIso(rec.createdAt),
-          'model': rec.model,
-          'provider': rec.provider,
+          'model': rec.model !== null && rec.model !== undefined ? rec.model : '',
+          'provider': rec.provider !== null && rec.provider !== undefined ? rec.provider : '',
           'input_tokens': rec.inputTokens,
           'output_tokens': rec.outputTokens,
           'reasoning_tokens': rec.reasoningTokens,
@@ -201,9 +207,9 @@ export class UsageRepository implements UsageDataStore {
           'cache_write_1h_tokens': rec.cacheWrite1hTokens,
           'cost_raw': rec.costRaw,
           'cost_usd': rec.costUsd,
-          'key_id': rec.keyId,
-          'session_id': rec.sessionId,
-          'plan': rec.plan,
+          'key_id': rec.keyId !== null && rec.keyId !== undefined ? rec.keyId : '',
+          'session_id': rec.sessionId !== null && rec.sessionId !== undefined ? rec.sessionId : '',
+          'plan': rec.plan !== null && rec.plan !== undefined ? rec.plan : '',
           'synced_at': syncedAt,
         };
         if (existed) {
@@ -222,9 +228,13 @@ export class UsageRepository implements UsageDataStore {
           };
           await store.update(upd, predicates);
         } else {
-          await store.insert('usage_records', values);
+          // 冲突时直接替换：游标分页在页边界可能重复返回同一条，避免整体同步被约束冲突打断
+          await store.insert('usage_records', values, relationalStore.ConflictResolution.ON_CONFLICT_REPLACE);
           inserted += 1;
         }
+      }
+      if (skipped > 0) {
+        console.error(`insertUsageRecords skipped ${skipped} invalid records`);
       }
       await this.refreshSyncTotals();
       return inserted;
