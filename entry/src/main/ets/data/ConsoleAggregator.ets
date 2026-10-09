@@ -7,6 +7,7 @@ import { ConsoleSnapshotStore } from './ConsoleSnapshotStore';
 import { ConsoleCsv } from './ConsoleCsv';
 import { ConsoleIntraday } from './ConsoleIntraday';
 import type { Totals, ModelStat, DailyStat, TrendPoint, SessionStat, RecordRow, UsageAggregator } from '../model/Stats';
+import type { UsageDataStore } from './UsageStore';
 
 /** 控制台用量通用字段（summary 与 models 条目共用）。 */
 interface ConsoleUsageFields {
@@ -57,7 +58,7 @@ interface ConsoleOrgLite {
  * 策略：本地有记录时用本地（明细更全），本地为空时回退到控制台聚合数据。
  */
 export class ConsoleAggregator implements UsageAggregator {
-  private local: UsageAggregator;
+  private local: UsageDataStore;
   private tokenProvider: () => Promise<string>;
   private wsProvider: () => Promise<string>;
   private static cache: Map<string, string> = new Map<string, string>();
@@ -67,7 +68,7 @@ export class ConsoleAggregator implements UsageAggregator {
   private static lastStale: boolean = false;
   private static readonly TTL_MS: number = 60000;
 
-  constructor(local: UsageAggregator, tokenProvider: () => Promise<string>, wsProvider: () => Promise<string>) {
+  constructor(local: UsageDataStore, tokenProvider: () => Promise<string>, wsProvider: () => Promise<string>) {
     this.local = local;
     this.tokenProvider = tokenProvider;
     this.wsProvider = wsProvider;
@@ -81,7 +82,10 @@ export class ConsoleAggregator implements UsageAggregator {
 
   async totals(period: string): Promise<Totals> {
     const t = await this.local.totals(period);
-    if (t.requestCount > 0) {
+    // 本地明细只有在「覆盖所求周期」时才算权威：逐条明细只同步到一段
+    // （官方保留 30 天，且增量同步只翻最新几页），不覆盖时用官方聚合，
+    // 否则「近30天/全部」的合计会明显偏小。
+    if (t.requestCount > 0 && await this.localCovers(period)) {
       return t;
     }
     const key = `t:${period}`;
@@ -108,7 +112,7 @@ export class ConsoleAggregator implements UsageAggregator {
 
   async modelStats(period: string): Promise<ModelStat[]> {
     const rows = await this.local.modelStats(period);
-    if (rows.length > 0) {
+    if (rows.length > 0 && await this.localCovers(period)) {
       return rows;
     }
     // 「全部」：若本地累计历史已超出官方窗口（> 30 天），用历史明细汇总更长期限的排行
@@ -161,7 +165,8 @@ export class ConsoleAggregator implements UsageAggregator {
 
   async dailyStats(days: number): Promise<DailyStat[]> {
     const rows = await this.local.dailyStats(days);
-    if (rows.length > 0) {
+    // 同 totals：本地明细不覆盖该天数时改用官方逐日聚合（否则趋势会缺天）
+    if (rows.length > 0 && await this.localCovers(days >= 90 ? 'all' : `${days}d`)) {
       return rows;
     }
     const key = `d:${days}`;
@@ -226,6 +231,38 @@ export class ConsoleAggregator implements UsageAggregator {
   /** 最近一次聚合数据是否来自缓存/快照（供界面决定「失败时保留上次数值」）。 */
   static isStale(): boolean {
     return ConsoleAggregator.lastStale;
+  }
+
+  /**
+   * 本地逐条明细是否覆盖所求周期。
+   *
+   * 判定用**记录自身的时间**（最新记录作为「现在」锚点），因此不受设备时钟偏差影响：
+   * 最早记录不晚于「最新记录 − (days-1) 天」即视为覆盖。
+   * 「今天」直接用本地（本地已有的就是今天的全部）；「全部」不视为覆盖（交给官方/历史）。
+   */
+  private async localCovers(period: string): Promise<boolean> {
+    if (period === Constants.PERIOD_TODAY) {
+      return true;
+    }
+    if (period === Constants.PERIOD_ALL) {
+      return false;
+    }
+    const m = /^(\d+)d$/.exec(period);
+    const days = m !== null ? Math.max(1, Number(m[1])) : 30;
+    try {
+      const state = await this.local.getSyncState();
+      if (state.oldestRecordAt === '') {
+        return false;
+      }
+      const oldest = Date.parse(state.oldestRecordAt);
+      const newest = state.newestRecordAt !== '' ? Date.parse(state.newestRecordAt) : oldest;
+      if (Number.isNaN(oldest) || Number.isNaN(newest)) {
+        return false;
+      }
+      return oldest <= newest - (days - 1) * 86400000;
+    } catch (e) {
+      return false;
+    }
   }
 
   /**

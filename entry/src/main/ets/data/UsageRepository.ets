@@ -59,17 +59,59 @@ const rowAsUsageRecord = (rs: relationalStore.ResultSet): UsageRecord => {
 /** 账户 + 用量记录 + 同步状态的 RDB 实现，并承载全部聚合查询。 */
 export class UsageRepository implements UsageDataStore {
   // ---- 周期过滤（对齐原版 db.py _period_where：today 用本地时区，N 天窗口用 UTC） ----
-  private static periodWhere(period: string): PeriodFilter {
+
+  /**
+   * 「现在」锚点：优先取本地最新记录的 `created_at`（服务器时间）。
+   *
+   * 为什么不用 `datetime('now')`：设备系统时间可能不准（实测遇过偏差 12 天），
+   * 而记录时间戳来自服务器，用设备时间划分周期会把「今天/近7天」算错。
+   */
+  private static async nowAnchor(): Promise<string> {
+    try {
+      const store = await RdbHelper.getStore();
+      const rs = await store.querySql('SELECT MAX(created_at) AS m FROM usage_records');
+      let m = '';
+      if (rs.goToFirstRow()) {
+        m = rs.getString(rs.getColumnIndex('m'));
+      }
+      rs.close();
+      if (m !== null && m !== '') {
+        return m;
+      }
+    } catch (e) {
+      console.error('nowAnchor failed: ' + (e instanceof Error ? e.message : String(e)));
+    }
+    return new Date().toISOString();
+  }
+
+  /**
+   * 周期过滤条件。
+   *
+   * `anchorIso` 为空时退回 SQL 内置 `now`（纯函数测试路径）；
+   * 运行时一律传入 `nowAnchor()`（服务器时间），避免设备时钟偏差把周期算错。
+   */
+  private static periodWhere(period: string, anchorIso: string): PeriodFilter {
     let clause = '';
     const params: relationalStore.ValueType[] = [];
+    const useAnchor = anchorIso !== '';
     if (period === Constants.PERIOD_TODAY) {
-      clause = `substr(datetime(created_at, 'localtime'), 1, 10) = date('now', 'localtime')`;
+      clause = useAnchor
+        ? `substr(datetime(created_at, 'localtime'), 1, 10) = date(?, 'localtime')`
+        : `substr(datetime(created_at, 'localtime'), 1, 10) = date('now', 'localtime')`;
+      if (useAnchor) {
+        params.push(anchorIso);
+      }
     } else if (period === Constants.PERIOD_ALL) {
       clause = '';
     } else {
       const m = /^(\d+)d$/.exec(period);
       const days = m !== null ? Math.max(1, Number(m[1])) : 30;
-      clause = `datetime(created_at) >= datetime('now', ?)`;
+      clause = useAnchor
+        ? `datetime(created_at) >= datetime(?, ?)`
+        : `datetime(created_at) >= datetime('now', ?)`;
+      if (useAnchor) {
+        params.push(anchorIso);
+      }
       params.push(`-${days} days`);
     }
     return { clause: clause, params: params };
@@ -377,7 +419,7 @@ export class UsageRepository implements UsageDataStore {
   // ---- 聚合 ----
   async totals(period: string): Promise<Totals> {
     try {
-      const f = UsageRepository.periodWhere(period);
+      const f = UsageRepository.periodWhere(period, await UsageRepository.nowAnchor());
       const store = await RdbHelper.getStore();
       const rs = await store.querySql(
         `SELECT COUNT(*) AS request_count,
@@ -419,7 +461,7 @@ export class UsageRepository implements UsageDataStore {
 
   async modelStats(period: string): Promise<ModelStat[]> {
     try {
-      const f = UsageRepository.periodWhere(period);
+      const f = UsageRepository.periodWhere(period, await UsageRepository.nowAnchor());
       const store = await RdbHelper.getStore();
       const rs = await store.querySql(
         `SELECT model,
@@ -466,6 +508,7 @@ export class UsageRepository implements UsageDataStore {
   async dailyStats(days: number): Promise<DailyStat[]> {
     try {
       const store = await RdbHelper.getStore();
+      const anchor = await UsageRepository.nowAnchor();
       const rs = await store.querySql(
         `SELECT substr(datetime(created_at, 'localtime'), 1, 10) AS date,
                 SUM(input_tokens + cache_read_tokens + cache_write_5m_tokens + cache_write_1h_tokens) AS total_input_tokens,
@@ -477,9 +520,9 @@ export class UsageRepository implements UsageDataStore {
                 SUM(cost_usd) AS total_cost_usd,
                 COUNT(*) AS request_count
          FROM usage_records
-         WHERE substr(datetime(created_at, 'localtime'), 1, 10) >= date('now', 'localtime', ?)
+         WHERE substr(datetime(created_at, 'localtime'), 1, 10) >= date(?, 'localtime', ?)
          GROUP BY substr(datetime(created_at, 'localtime'), 1, 10)
-         ORDER BY date ASC`, [`-${days} days`]);
+         ORDER BY date ASC`, [anchor, `-${days} days`]);
       const out: DailyStat[] = [];
       while (rs.goToNextRow()) {
         const l = (n: string): number => rs.getLong(rs.getColumnIndex(n));
@@ -510,14 +553,15 @@ export class UsageRepository implements UsageDataStore {
   async todayTrend(): Promise<TrendPoint[]> {
     try {
       const store = await RdbHelper.getStore();
+      const anchor = await UsageRepository.nowAnchor();
       const rs = await store.querySql(
         `SELECT CAST(strftime('%H', datetime(created_at, 'localtime')) AS INTEGER) AS h,
                 SUM(input_tokens) AS input,
                 SUM(output_tokens) AS output,
                 SUM(reasoning_tokens) AS reasoning
          FROM usage_records
-         WHERE substr(datetime(created_at, 'localtime'), 1, 10) = date('now', 'localtime')
-         GROUP BY h`);
+         WHERE substr(datetime(created_at, 'localtime'), 1, 10) = date(?, 'localtime')
+         GROUP BY h`, [anchor]);
       const byHour = new Map<number, HourBucket>();
       while (rs.goToNextRow()) {
         const h = rs.getLong(rs.getColumnIndex('h'));
@@ -548,7 +592,7 @@ export class UsageRepository implements UsageDataStore {
 
   async sessionStatsPage(page: number, pageSize: number, period: string): Promise<[SessionStat[], number]> {
     try {
-      const f = UsageRepository.periodWhere(period);
+      const f = UsageRepository.periodWhere(period, await UsageRepository.nowAnchor());
       const where = UsageRepository.whereOf(f);
       const store = await RdbHelper.getStore();
       // 对齐上游 v1.0.2：无 session_id 的记录不再合并成一行「未归属」，而是按 key_id 拆分；
@@ -610,8 +654,8 @@ export class UsageRepository implements UsageDataStore {
    * 独立成静态纯函数便于单测覆盖：此前把周期参数预先放入数组、而 SQL 里 model 占位符在前，
    * 导致「7天/30天 + 指定模型」时 model 拿到 '-7 days' 而查不到任何数据。
    */
-  static recordsFilter(model: string | null, period: string): PeriodFilter {
-    const pf = UsageRepository.periodWhere(period);
+  static recordsFilter(model: string | null, period: string, anchorIso: string = ''): PeriodFilter {
+    const pf = UsageRepository.periodWhere(period, anchorIso);
     const conds: string[] = [];
     const params: relationalStore.ValueType[] = [];
     if (model !== null && model !== '') {
@@ -630,7 +674,7 @@ export class UsageRepository implements UsageDataStore {
   async usageRecordsPage(page: number, pageSize: number, model: string | null, period: string): Promise<[RecordRow[], number]> {
     try {
       const store = await RdbHelper.getStore();
-      const f = UsageRepository.recordsFilter(model, period);
+      const f = UsageRepository.recordsFilter(model, period, await UsageRepository.nowAnchor());
       const where = f.clause;
       const params = f.params;
       const countRs = await store.querySql(`SELECT COUNT(*) AS c FROM usage_records ${where}`, params);
