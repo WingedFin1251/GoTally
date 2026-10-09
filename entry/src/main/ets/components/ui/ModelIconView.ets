@@ -24,10 +24,13 @@ export struct ModelIconView {
 
   build() {
     if (ModelIcon.isKnown(this.model)) {
+      // syncLoad：图标是 rawfile 动态路径，异步解码在列表重建（ForEach 换 key）时可能被
+      // 取消而留白，改为同步加载（16px 小图，开销可忽略）。
       Image($rawfile(ModelIcon.resourceNameOf(this.model, this.dark)))
         .width(this.iconSize)
         .height(this.iconSize)
         .objectFit(ImageFit.Contain)
+        .syncLoad(true)
         .draggable(false)
     } else {
       Text(ModelIcon.initialsOf(this.model))
