@@ -5,6 +5,7 @@ import { Constants } from '../common/constants/Constants';
 import { WebCookies } from '../common/utils/WebCookies';
 import { ConsoleSnapshotStore } from './ConsoleSnapshotStore';
 import { ConsoleCsv } from './ConsoleCsv';
+import { ConsoleIntraday } from './ConsoleIntraday';
 import type { Totals, ModelStat, DailyStat, TrendPoint, SessionStat, RecordRow, UsageAggregator } from '../model/Stats';
 
 /** 控制台用量通用字段（summary 与 models 条目共用）。 */
@@ -371,6 +372,26 @@ export class ConsoleAggregator implements UsageAggregator {
       }
       await ConsoleSnapshotStore.appendHistory(ConsoleCsv.aggregateByDay(rows));
       await ConsoleSnapshotStore.appendHistoryModels(rows);
+      // 今日趋势采样：CSV 中「今天」的各模型行相加即为当日累计值（无需额外请求），
+      // 这样即使用户停留在别的页面，小时级曲线也能持续累积。
+      const today = ConsoleIntraday.localDay(new Date());
+      let inSum = 0;
+      let outSum = 0;
+      let reqSum = 0;
+      let costSum = 0;
+      let hasToday = false;
+      for (const r of rows) {
+        if (r.day === today) {
+          hasToday = true;
+          inSum += r.inputTokens + r.cacheRead + r.cacheWrite;
+          outSum += r.outputTokens;
+          reqSum += r.requests;
+          costSum += r.costUsd;
+        }
+      }
+      if (hasToday) {
+        await ConsoleSnapshotStore.appendIntradaySample(inSum, outSum, reqSum, costSum, Date.now());
+      }
       return true;
     } catch (e) {
       console.error('backfillFromCsv failed: ' + (e instanceof Error ? e.message : String(e)));
