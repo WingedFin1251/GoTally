@@ -1,53 +1,119 @@
 // entry/src/main/ets/common/utils/ModelIcon.ets
+
+/** 关键词 → 品牌键 的匹配规则。 */
+interface IconRule {
+  keyword: string;
+  brand: string;
+}
+
 /**
- * 模型图标映射（借鉴上游 opencode-go-gauge 的做法并修正其兜底）。
+ * 模型图标映射。
  *
- * 上游规则：取模型名第一段（按 `-` 切分）查表；查不到时 `hy*` 归 hy，
- * 其余一律回退 **deepseek** 图标 —— 这会把 claude / longcat 等显示成 deepseek 的
- * 品牌 logo（误导）。这里改为：查不到返回空键，由界面渲染「首字母徽章」。
+ * 与上游 opencode-go-gauge 的差异：
+ *  1. 上游只取模型名**第一段**查表，这里对**整个模型名**做关键词扫描
+ *     （覆盖 llama-4-scout / mistral-large / sonar-pro / o3-mini / doubao-1.5 / phi-4 等）；
+ *  2. 上游查不到时一律回退 deepseek 图标（会把 claude / longcat 显示成 DeepSeek 的
+ *     logo），这里返回空键，由界面渲染「首字母徽章」；
+ *  3. **浅色/深色两套图标**：单色 logo 的 SVG 没有 fill（默认黑）或用 currentColor，
+ *     深色背景下不可见。运行时 `fillColor` 对无 fill 的 SVG 不生效，因此在构建期
+ *     就生成两套文件（`_dark` 后缀，显式 fill：浅色主题 #1F1F1F / 深色主题 #E8EAED）。
  *
- * 另有主题差异：gpt / grok / mimo 的原版 logo 是单色（currentColor），
- * 深色背景下不可见，深色主题改用彩色版（`*_color`）。
+ * 资源：`resources/rawfile/model_icons/model_<brand>[_dark].svg`
+ *  - 彩色品牌（deepseek / glm / hy / kimi / meta / minimax / qwen）：两主题共用
+ *  - 单色品牌：浅色 + 深色两套
+ * 来源：上游 opencode-go-gauge（MIT）与 Simple Icons（CC0）。
  */
 export class ModelIcon {
-  /** 模型名首段 → 规范品牌键（别名归一，如 muse → meta）。 */
-  private static readonly ALIAS: Map<string, string> = ModelIcon.buildAlias();
+  /** 全名关键词规则（顺序即优先级，越靠前越特异）。 */
+  private static readonly RULES: IconRule[] = ModelIcon.buildRules();
 
-  /** 规范品牌键 → 资源名（resources/base/media/model_*.svg）。 */
-  private static readonly RES: Map<string, string> = ModelIcon.buildRes();
+  /** 单色品牌（有 `_dark` 变体）。 */
+  private static readonly MONO: string[] = [
+    'gpt', 'grok', 'mimo', 'claude', 'gemini', 'mistral', 'perplexity',
+    'baidu', 'bytedance', 'microsoft', 'nvidia', 'huawei', 'tencentqq', 'alibabacloud',
+  ];
 
-  private static buildAlias(): Map<string, string> {
-    const m = new Map<string, string>();
-    const brands: string[] = ['deepseek', 'glm', 'gpt', 'grok', 'kimi', 'meta', 'mimo', 'minimax', 'qwen', 'hy',
-      'claude', 'gemini'];
-    for (const b of brands) {
-      m.set(b, b);
-    }
-    m.set('muse', 'meta');
-    m.set('anthropic', 'claude');
-    m.set('googlegemini', 'gemini');
-    m.set('google', 'gemini');
-    return m;
+  /** 规范品牌键集合。 */
+  private static readonly BRANDS: string[] = [
+    'deepseek', 'glm', 'hy', 'kimi', 'meta', 'minimax', 'qwen',
+    'gpt', 'grok', 'mimo', 'claude', 'gemini', 'mistral', 'perplexity',
+    'baidu', 'bytedance', 'microsoft', 'nvidia', 'huawei', 'tencentqq', 'alibabacloud',
+  ];
+
+  private static buildRules(): IconRule[] {
+    const r: IconRule[] = [];
+    const add = (keyword: string, brand: string): void => {
+      r.push({ keyword: keyword, brand: brand });
+    };
+    // Claude / Anthropic
+    add('claude', 'claude');
+    add('anthropic', 'claude');
+    // OpenAI 系
+    add('chatgpt', 'gpt');
+    add('gpt', 'gpt');
+    add('codex', 'gpt');
+    add('davinci', 'gpt');
+    add('o1-', 'gpt');
+    add('o3-', 'gpt');
+    add('o4-', 'gpt');
+    // Google
+    add('gemini', 'gemini');
+    add('googlegemini', 'gemini');
+    add('palm', 'gemini');
+    // xAI
+    add('grok', 'grok');
+    // DeepSeek
+    add('deepseek', 'deepseek');
+    // 阿里通义
+    add('qwen', 'qwen');
+    add('tongyi', 'qwen');
+    add('bailian', 'qwen');
+    add('alibaba', 'alibabacloud');
+    // 智谱
+    add('glm', 'glm');
+    add('chatglm', 'glm');
+    add('zhipu', 'glm');
+    // 月之暗面
+    add('kimi', 'kimi');
+    add('moonshot', 'kimi');
+    // MiniMax
+    add('minimax', 'minimax');
+    add('abab', 'minimax');
+    // 小米
+    add('mimo', 'mimo');
+    // 腾讯混元
+    add('hunyuan', 'hy');
+    add('tencent', 'tencentqq');
+    // Meta
+    add('llama', 'meta');
+    add('meta-', 'meta');
+    add('muse', 'meta');
+    // Mistral
+    add('mistral', 'mistral');
+    add('mixtral', 'mistral');
+    add('codestral', 'mistral');
+    add('magistral', 'mistral');
+    add('devstral', 'mistral');
+    // Perplexity
+    add('sonar', 'perplexity');
+    add('perplexity', 'perplexity');
+    // 百度文心
+    add('ernie', 'baidu');
+    add('wenxin', 'baidu');
+    // 字节豆包 / Seed
+    add('doubao', 'bytedance');
+    add('seed-', 'bytedance');
+    add('bytedance', 'bytedance');
+    // 微软 Phi
+    add('phi-', 'microsoft');
+    add('phi4', 'microsoft');
+    // NVIDIA
+    add('nemotron', 'nvidia');
+    // 华为盘古
+    add('panpan', 'huawei');
+    add('pangu', 'huawei');
+    return r;
   }
-
-  private static buildRes(): Map<string, string> {
-    const m = new Map<string, string>();
-    const brands: string[] = ['deepseek', 'glm', 'gpt', 'grok', 'kimi', 'meta', 'mimo', 'minimax', 'qwen', 'hy',
-      'claude', 'gemini'];
-    for (const b of brands) {
-      m.set(b, `model_${b}`);
-    }
-    return m;
-  }
-
-  /**
-   * 单色图标（自身不带颜色，SVG 无 fill 属性 → 默认黑，深色背景不可见）。
-   * 这些图标需要界面按主题设置 fillColor。
-   */
-  private static readonly MONO: string[] = ['claude', 'gemini'];
-
-  /** 深色主题下需要换彩色版的键（原版是单色 logo）。 */
-  private static readonly COLOR_VARIANTS: string[] = ['gpt', 'grok', 'mimo'];
 
   /** 模型名 → 品牌键（'' 表示未知，界面用首字母徽章兜底）。 */
   static keyOf(model: string): string {
@@ -55,24 +121,13 @@ export class ModelIcon {
     if (s === '') {
       return '';
     }
-    // 取第一段：`-` / `_` / `.` / 空格 都视为分隔符（deepseek-v4.1-flash → deepseek）
-    let base = s;
-    for (const sep of ['-', '_', '.', ' ', '/', ':']) {
-      const i = base.indexOf(sep);
-      if (i > 0) {
-        base = base.substring(0, i);
+    for (const rule of ModelIcon.RULES) {
+      if (s.includes(rule.keyword)) {
+        return rule.brand;
       }
     }
-    if (ModelIcon.ALIAS.has(base)) {
-      return ModelIcon.ALIAS.get(base) as string;
-    }
-    // 「家族名 + 版本号」形态（qwen3 / glm5 / deepseek4 / grok5）：去掉末尾数字再匹配
-    const stripped = base.replace(/[0-9]+$/, '');
-    if (stripped !== base && ModelIcon.ALIAS.has(stripped)) {
-      return ModelIcon.ALIAS.get(stripped) as string;
-    }
-    // 混元系列（hy2 / hy3 / hunyuan…）统一归 hy
-    if (base.startsWith('hy') || base.startsWith('hunyuan')) {
+    // 短关键词只按首段前缀匹配，避免误命中（hy2 / hy3 / hunyuan…）
+    if (ModelIcon.firstSegment(s).startsWith('hy')) {
       return 'hy';
     }
     return '';
@@ -83,21 +138,27 @@ export class ModelIcon {
     return ModelIcon.keyOf(model) !== '';
   }
 
-  /** 该图标是否需要界面按主题上色（自身无颜色，否则深色背景不可见）。 */
-  static needsTint(model: string): boolean {
+  /** 该品牌是否为单色（有浅/深两套文件）。 */
+  static isMono(model: string): boolean {
     return ModelIcon.MONO.includes(ModelIcon.keyOf(model));
   }
 
-  /** 图标资源名（含主题适配）；未知模型返回空串。 */
+  /**
+   * 图标文件路径（相对 `resources/rawfile`）；未知模型返回空串。
+   * 单色品牌按主题选 `_dark` 变体。
+   */
   static resourceNameOf(model: string, dark: boolean): string {
     const key = ModelIcon.keyOf(model);
     if (key === '') {
       return '';
     }
-    if (dark && ModelIcon.COLOR_VARIANTS.includes(key)) {
-      return `model_${key}_color`;
-    }
-    return ModelIcon.RES.get(key) as string;
+    const suffix = dark && ModelIcon.MONO.includes(key) ? '_dark' : '';
+    return `model_icons/model_${key}${suffix}.svg`;
+  }
+
+  /** 已知品牌数量（关于页/设置页展示能力用）。 */
+  static brandCount(): number {
+    return ModelIcon.BRANDS.length;
   }
 
   /** 未知模型的徽章文字：取首字母（最多 2 个，跳过数字段）。 */
@@ -131,7 +192,19 @@ export class ModelIcon {
     for (let i = 0; i < s.length; i++) {
       hash = (hash * 31 + s.charCodeAt(i)) % 1000000007;
     }
-    const idx = hash % palette.length;
-    return palette[idx];
+    return palette[hash % palette.length];
+  }
+
+  /** 取第一段（`-` `_` `.` 空格 `/` `:` 视为分隔符）。 */
+  private static firstSegment(s: string): string {
+    let base = s;
+    const seps: string[] = ['-', '_', '.', ' ', '/', ':'];
+    for (const sep of seps) {
+      const i = base.indexOf(sep);
+      if (i > 0) {
+        base = base.substring(0, i);
+      }
+    }
+    return base;
   }
 }

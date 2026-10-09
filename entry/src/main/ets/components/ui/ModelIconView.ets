@@ -5,33 +5,30 @@ import { ModelIcon } from '../../common/utils/ModelIcon';
  * 模型图标（品牌 SVG；未知模型退化为「首字母徽章」）。
  *
  * 用法：`ModelIconView({ model: 'deepseek-v4.1-flash', iconSize: 16, dark: true })`
- * 品牌资源见 `resources/base/media/model_*.svg`：多来自上游 opencode-go-gauge（MIT），
- * Claude / Gemini 取自 Simple Icons（CC0）。
+ *
+ * 单色 logo 的 SVG 默认是黑色（或用 currentColor），深色背景下不可见；运行时
+ * `fillColor` 对「无 fill 属性」的 SVG 不生效，因此**预制两套文件**：
+ *   - `model_<brand>.svg`       浅色主题（#1F1F1F）
+ *   - `model_<brand>_dark.svg`  深色主题（#E8EAED）
+ * 彩色品牌（deepseek / glm / hy / kimi / meta / minimax / qwen）两主题共用一套。
+ *
+ * 资源位置：`resources/rawfile/model_icons/`（用 `$rawfile` 动态取，新增图标无需改代码）
+ * 来源：上游 opencode-go-gauge（MIT）、Simple Icons（CC0）
  */
 @Component
 export struct ModelIconView {
   @Prop model: string = '';
   @Prop iconSize: number = 16;
-  /** 深色主题：gpt/grok/mimo 用彩色版（原版单色在深色下不可见）。 */
+  /** 是否深色主题（决定单色图标用哪一套文件）。 */
   @Prop dark: boolean = true;
 
   build() {
     if (ModelIcon.isKnown(this.model)) {
-      if (ModelIcon.needsTint(this.model)) {
-        // 单色图标（claude / gemini）自身无颜色：按主题上色，否则深色背景看不见
-        Image(this.iconSource())
-          .width(this.iconSize)
-          .height(this.iconSize)
-          .objectFit(ImageFit.Contain)
-          .fillColor(this.dark ? '#E8EAED' : '#1F1F1F')
-          .draggable(false)
-      } else {
-        Image(this.iconSource())
-          .width(this.iconSize)
-          .height(this.iconSize)
-          .objectFit(ImageFit.Contain)
-          .draggable(false)
-      }
+      Image($rawfile(ModelIcon.resourceNameOf(this.model, this.dark)))
+        .width(this.iconSize)
+        .height(this.iconSize)
+        .objectFit(ImageFit.Contain)
+        .draggable(false)
     } else {
       Text(ModelIcon.initialsOf(this.model))
         .fontSize(this.iconSize * 0.55)
@@ -45,45 +42,4 @@ export struct ModelIconView {
         .draggable(false)
     }
   }
-
-  /** 品牌键 → 具体资源（`$r` 只能在这里按分支取，无法用字符串拼接）。 */
-  private iconSource(): Resource {
-    const key = ModelIcon.keyOf(this.model);
-    const useColor = this.dark && (key === 'gpt' || key === 'grok' || key === 'mimo');
-    if (key === 'deepseek') {
-      return $r('app.media.model_deepseek');
-    }
-    if (key === 'glm') {
-      return $r('app.media.model_glm');
-    }
-    if (key === 'gpt') {
-      return useColor ? $r('app.media.model_gpt_color') : $r('app.media.model_gpt');
-    }
-    if (key === 'grok') {
-      return useColor ? $r('app.media.model_grok_color') : $r('app.media.model_grok');
-    }
-    if (key === 'kimi') {
-      return $r('app.media.model_kimi');
-    }
-    if (key === 'meta') {
-      return $r('app.media.model_meta');
-    }
-    if (key === 'mimo') {
-      return useColor ? $r('app.media.model_mimo_color') : $r('app.media.model_mimo');
-    }
-    if (key === 'minimax') {
-      return $r('app.media.model_minimax');
-    }
-    if (key === 'qwen') {
-      return $r('app.media.model_qwen');
-    }
-    if (key === 'claude') {
-      return $r('app.media.model_claude');
-    }
-    if (key === 'gemini') {
-      return $r('app.media.model_gemini');
-    }
-    return $r('app.media.model_hy');
-  }
 }
-
