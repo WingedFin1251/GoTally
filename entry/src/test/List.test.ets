@@ -6,6 +6,7 @@ import recordsFilterTest from './RecordsFilter.test';
 import quotaSourceTest from './QuotaSource.test';
 import consoleSnapshotTest from './ConsoleSnapshot.test';
 import consoleCsvTest from './ConsoleCsv.test';
+import consoleIntradayTest from './ConsoleIntraday.test';
 
 export default function testsuite() {
   formatterTest();
@@ -16,4 +17,5 @@ export default function testsuite() {
   quotaSourceTest();
   consoleSnapshotTest();
   consoleCsvTest();
+  consoleIntradayTest();
 }

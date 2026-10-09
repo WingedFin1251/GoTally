@@ -181,6 +181,21 @@ export struct DashboardPage {
     return out;
   }
 
+  /** 取字符串资源并按 {0} 替换参数（个别版本 getStringSync 不执行占位符格式化，故手动替换）。 */
+  private str(id: number, arg: string): string {
+    try {
+      const ctx = this.getUIContext().getHostContext();
+      if (ctx === undefined) {
+        return '';
+      }
+      const tpl = ctx.resourceManager.getStringSync(id);
+      return arg === '' ? tpl : tpl.split('{0}').join(arg);
+    } catch (e) {
+      console.error('res failed: ' + (e instanceof Error ? e.message : String(e)));
+      return '';
+    }
+  }
+
   private trendLabels(): string[] {
     const out: string[] = [];
     for (const t of this.vm.trend) {
@@ -196,22 +211,37 @@ export struct DashboardPage {
         Text($r('app.string.today_trend')).fontSize(15).fontWeight(FontWeight.Bold)
         Text($r('app.string.hours_24')).fontSize(11).fontColor($r('app.color.text_muted'))
         Blank()
+        // 今日趋势由本地采样重建（官方无小时级接口），标注采样点数
+        if (this.vm.trend.length > 0) {
+          Text(this.str($r('app.string.today_trend_local').id, `${this.vm.trend.length}`))
+            .fontSize(11)
+            .fontColor($r('app.color.text_muted'))
+        }
       }
       .width('100%')
 
-      // 输入 + 输出分组柱状图（今日 24h，共享同一比例尺）
-      Row({ space: 2 }) {
-        BarChart({
-          labels: this.trendLabels(),
-          values: this.trendValues(),
-          colors: this.trendColors(),
-          version: this.chartVersion,
-        })
+      // 采样点不足时给说明，而不是一张空图
+      if (this.vm.trend.length === 0) {
+        Text($r('app.string.today_trend_empty'))
+          .fontSize(11)
+          .fontColor($r('app.color.text_muted'))
           .width('100%')
-          .height(180)
+          .padding({ top: 12, bottom: 12 })
+      } else {
+        // 输入 + 输出分组柱状图（今日 24h，共享同一比例尺）
+        Row({ space: 2 }) {
+          BarChart({
+            labels: this.trendLabels(),
+            values: this.trendValues(),
+            colors: this.trendColors(),
+            version: this.chartVersion,
+          })
+            .width('100%')
+            .height(180)
       }
       .width('100%')
       .height(200)
+      }
     }
     .width('100%')
     .padding(12)

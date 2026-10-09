@@ -113,9 +113,26 @@ export struct StatsPage {
    * 趋势图右上角标签：`09-12 → 09-27 · 15 天`（>30 天时补「含本地累计」）。
    * 「今天」周期是 24 小时逐时趋势，不显示区间。
    */
+  /** 取字符串资源并按 {0} 替换参数（个别版本 getStringSync 不执行占位符格式化，故手动替换）。 */
+  private str(id: number, arg: string): string {
+    try {
+      const ctx = this.getUIContext().getHostContext();
+      if (ctx === undefined) {
+        return '';
+      }
+      const tpl = ctx.resourceManager.getStringSync(id);
+      return arg === '' ? tpl : tpl.split('{0}').join(arg);
+    } catch (e) {
+      console.error('res failed: ' + (e instanceof Error ? e.message : String(e)));
+      return '';
+    }
+  }
+
   private trendRangeLabel(): string {
     if (this.chart.period === Constants.PERIOD_TODAY) {
-      return '';
+      // 今日趋势由本地采样重建，标注采样点数以便判断数据完整度
+      const n = this.chart.todayTrend.length;
+      return n > 0 ? this.str($r('app.string.today_trend_local').id, `${n}`) : '';
     }
     const days = this.chart.daily30;
     if (days.length === 0) {
@@ -390,7 +407,14 @@ export struct StatsPage {
         }
       }
       .width('100%')
-      if ((this.chart.version & 1) === 0) {
+      // 今日趋势：官方无小时级接口，靠本地采样重建；采样点不足时给出说明而不是空图
+      if (this.chart.period === Constants.PERIOD_TODAY && this.chart.todayTrend.length === 0) {
+        Text($r('app.string.today_trend_empty'))
+          .fontSize(11)
+          .fontColor($r('app.color.text_muted'))
+          .width('100%')
+          .padding({ top: 12, bottom: 12 })
+      } else if ((this.chart.version & 1) === 0) {
         LineChart({
           series: this.trendSeries(),
           labels: this.trendLabels(),

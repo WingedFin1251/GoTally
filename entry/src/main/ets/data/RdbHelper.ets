@@ -125,6 +125,16 @@ const SCHEMA_STATEMENTS: string[] = [
      updated_at TEXT NOT NULL,
      PRIMARY KEY (date, model)
    );`,
+  // 今日小时级趋势的本地采样（官方无小时级接口，靠每次刷新记录当日累计值反推逐小时用量）
+  `CREATE TABLE IF NOT EXISTS console_intraday (
+     ts_min INTEGER PRIMARY KEY,
+     day TEXT NOT NULL,
+     input_tokens INTEGER NOT NULL DEFAULT 0,
+     output_tokens INTEGER NOT NULL DEFAULT 0,
+     request_count INTEGER NOT NULL DEFAULT 0,
+     cost_usd REAL NOT NULL DEFAULT 0,
+     updated_at TEXT NOT NULL
+   );`,
 ];
 
 /** RDB 单例：建库建表，初始化单行表。getStore 单飞（并发首次调用共享同一次初始化），避免竞争抛错。 */

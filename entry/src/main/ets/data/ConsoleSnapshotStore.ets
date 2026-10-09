@@ -1,9 +1,11 @@
 // entry/src/main/ets/data/ConsoleSnapshotStore.ets
 import { relationalStore } from '@kit.ArkData';
 import { RdbHelper } from './RdbHelper';
-import type { Totals, ModelStat, DailyStat } from '../model/Stats';
+import type { Totals, ModelStat, DailyStat, TrendPoint } from '../model/Stats';
 import type { QuotaWindow } from '../model/UsageRecord';
 import type { CsvUsageRow } from './ConsoleCsv';
+import { ConsoleIntraday } from './ConsoleIntraday';
+import type { IntradaySample } from './ConsoleIntraday';
 
 /**
  * 官方聚合数据本地快照（离线可看）。
@@ -407,6 +409,80 @@ export class ConsoleSnapshotStore {
     } catch (e) {
       console.error('historyRange failed: ' + (e instanceof Error ? e.message : String(e)));
       return '';
+    }
+  }
+
+  // ---- 今日小时级趋势的本地采样 ----
+
+  /**
+   * 记录一个当日累计采样点（每次刷新调用）。
+   *
+   * 去重：`ts_min`（epoch 分钟）为主键，同一分钟内多次刷新只保留最后一次，
+   * 因此不会「存多份」；超过 7 天的采样行会被清理。
+   */
+  static async appendIntradaySample(input: number, output: number, requests: number,
+    costUsd: number, atMs: number): Promise<void> {
+    try {
+      const store = await RdbHelper.getStore();
+      const tsMin = ConsoleIntraday.toTsMin(atMs);
+      const day = ConsoleIntraday.localDay(new Date(atMs));
+      await store.executeSql(
+        `INSERT OR REPLACE INTO console_intraday
+         (ts_min, day, input_tokens, output_tokens, request_count, cost_usd, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?)`,
+        [tsMin, day, input, output, requests, costUsd, RdbHelper.nowIso()]);
+      const cutoff = ConsoleIntraday.toTsMin(Date.now() - 7 * 86400000);
+      await store.executeSql('DELETE FROM console_intraday WHERE ts_min < ?', [cutoff]);
+    } catch (e) {
+      console.error('appendIntradaySample failed: ' + (e instanceof Error ? e.message : String(e)));
+    }
+  }
+
+  /** 读取某天（本地日期）的采样点，升序。 */
+  static async loadIntradaySamples(day: string): Promise<IntradaySample[]> {
+    const out: IntradaySample[] = [];
+    try {
+      const store = await RdbHelper.getStore();
+      const rs = await store.querySql(
+        `SELECT ts_min, input_tokens, output_tokens, request_count, cost_usd
+         FROM console_intraday WHERE day = ? ORDER BY ts_min ASC`, [day]);
+      while (rs.goToNextRow()) {
+        out.push({
+          tsMin: rs.getLong(rs.getColumnIndex('ts_min')),
+          input: rs.getLong(rs.getColumnIndex('input_tokens')),
+          output: rs.getLong(rs.getColumnIndex('output_tokens')),
+          requests: rs.getLong(rs.getColumnIndex('request_count')),
+          costUsd: rs.getDouble(rs.getColumnIndex('cost_usd')),
+        });
+      }
+      rs.close();
+    } catch (e) {
+      console.error('loadIntradaySamples failed: ' + (e instanceof Error ? e.message : String(e)));
+    }
+    return out;
+  }
+
+  /** 今日逐小时趋势：由今日采样点重建（官方无小时级接口）。 */
+  static async buildTodayTrend(): Promise<TrendPoint[]> {
+    const day = ConsoleIntraday.localDay(new Date());
+    const samples = await ConsoleSnapshotStore.loadIntradaySamples(day);
+    return ConsoleIntraday.buildTrend(samples);
+  }
+
+  /** 今日采样点数（界面提示用）。 */
+  static async intradaySampleCount(): Promise<number> {
+    try {
+      const day = ConsoleIntraday.localDay(new Date());
+      const store = await RdbHelper.getStore();
+      const rs = await store.querySql('SELECT COUNT(*) AS c FROM console_intraday WHERE day = ?', [day]);
+      let n = 0;
+      if (rs.goToFirstRow()) {
+        n = rs.getLong(rs.getColumnIndex('c'));
+      }
+      rs.close();
+      return n;
+    } catch (e) {
+      return 0;
     }
   }
 

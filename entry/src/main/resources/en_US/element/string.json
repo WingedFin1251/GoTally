@@ -125,6 +125,8 @@
     { "name": "history_days", "value": "Local history" },
     { "name": "history_desc", "value": "{0} days accumulated · the official API only exposes a 30-day window; older days are kept locally" },
     { "name": "history_none", "value": "No history yet · accumulates daily once online (days that leave the official window stay local)" },
+    { "name": "today_trend_local", "value": "Local sampling · {0} points" },
+    { "name": "today_trend_empty", "value": "The official API has no hourly data; the app samples the running daily total on every refresh (too few samples yet — check back or refresh a few times)" },
     { "name": "last_sync", "value": "Last Sync" },
     { "name": "total_records", "value": "Total Records" },
     { "name": "never", "value": "Never" },

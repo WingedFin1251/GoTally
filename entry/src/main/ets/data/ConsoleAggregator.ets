@@ -88,6 +88,11 @@ export class ConsoleAggregator implements UsageAggregator {
     if (json !== null) {
       const mapped = ConsoleAggregator.mapTotals(JSON.parse(json) as ConsoleSummary);
       await ConsoleSnapshotStore.saveTotals(key, mapped);
+      if (period === Constants.PERIOD_TODAY) {
+        // 顺带记一个当日累计采样点：官方无小时级接口，「今日趋势」靠这些采样点重建
+        await ConsoleSnapshotStore.appendIntradaySample(mapped.totalInputTokens,
+          mapped.totalOutputTokens, mapped.requestCount, mapped.totalCostUsd, Date.now());
+      }
       ConsoleAggregator.setStale(false);
       return mapped;
     }
@@ -222,9 +227,19 @@ export class ConsoleAggregator implements UsageAggregator {
     return ConsoleAggregator.lastStale;
   }
 
-  /** 控制台无小时级数据，保持本地（本地为空即空图）。 */
+  /**
+   * 今日逐小时趋势。
+   *
+   * 官方控制台**没有小时级接口**，所以：
+   *  1. 旧登录（能同步逐条明细）→ 用本地明细逐小时聚合（真实数据）；
+   *  2. 控制台登录 → 用每次刷新记录的**当日累计采样点**重建逐小时用量。
+   */
   async todayTrend(): Promise<TrendPoint[]> {
-    return this.local.todayTrend();
+    const rows = await this.local.todayTrend();
+    if (rows.length > 0) {
+      return rows;
+    }
+    return ConsoleSnapshotStore.buildTodayTrend();
   }
 
   /** 逐条明细控制台不提供，保留本地（新登录下为空）。 */
