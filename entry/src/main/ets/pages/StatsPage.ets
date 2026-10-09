@@ -2,6 +2,7 @@
 import { StatsViewModel } from './StatsViewModel';
 import { StatCard } from '../components/ui/StatCard';
 import { RangeSegmented } from '../components/ui/RangeSegmented';
+import { ModelIconView } from '../components/ui/ModelIconView';
 import { DonutChart, DonutItem } from '../components/charts/DonutChart';
 import { LineChart, LineSeries } from '../components/charts/LineChart';
 import { formatTokensUi, formatCost } from '../common/utils/Formatter';
@@ -47,6 +48,8 @@ export struct StatsPage {
   /** 当前展示的是否为离线快照（网络不可用时的本地官方数据）。 */
   @StorageProp('consoleStale') consoleStale: boolean = false;
   @Watch('onSyncFinished') @StorageProp('syncFinishedVersion') syncFinishedVersion: number = 0;
+  /** 当前主题是否深色：决定模型图标（gpt/grok/mimo）用彩色版还是单色版。 */
+  @State isDark: boolean = true;
   private refreshRetried: boolean = false;
   /** 滚动联动：向下滚隐藏悬浮导航栏、向上滚显示（由 Index 播放 HDS 滚动动画）。 */
   onNavChanged?: (hide: boolean) => void;
@@ -107,6 +110,9 @@ export struct StatsPage {
   private async initCurrency(): Promise<void> {
     AppStorage.setOrCreate('currency', await SettingsStore.getCurrency());
     AppStorage.setOrCreate('usdCny', await OpenCodeApi.fetchUsdCny());
+    // 主题：决定模型图标用单色还是彩色版（gpt/grok/mimo 原版单色在深色下不可见）
+    const s = await SettingsStore.getAll();
+    this.isDark = s.theme !== 'light';
   }
 
   /**
@@ -306,6 +312,8 @@ export struct StatsPage {
           ForEach(this.chart.models.slice(0, 6), (m: ModelStat) => {
             Row({ space: 6 }) {
               Text('●').fontSize(10).fontColor(this.modelColor(m.model))
+              // 模型图标：品牌 SVG，未知模型显示首字母徽章
+              ModelIconView({ model: m.model, iconSize: 14, dark: this.isDark })
               Text(m.model).fontSize(12).fontColor($r('app.color.text_primary')).layoutWeight(1).maxLines(1)
                 .textOverflow({ overflow: TextOverflow.Ellipsis })
                 .onClick(() => { this.toast(m.model); })

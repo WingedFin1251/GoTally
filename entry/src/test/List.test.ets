@@ -8,6 +8,7 @@ import consoleSnapshotTest from './ConsoleSnapshot.test';
 import consoleCsvTest from './ConsoleCsv.test';
 import consoleIntradayTest from './ConsoleIntraday.test';
 import consoleLogsTest from './ConsoleLogs.test';
+import modelIconTest from './ModelIcon.test';
 
 export default function testsuite() {
   formatterTest();
@@ -20,4 +21,5 @@ export default function testsuite() {
   consoleCsvTest();
   consoleIntradayTest();
   consoleLogsTest();
+  modelIconTest();
 }

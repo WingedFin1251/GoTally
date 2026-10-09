@@ -2,6 +2,7 @@
 import { RecordsViewModel } from './RecordsViewModel';
 import { Pager } from '../components/ui/Pager';
 import { RangeSegmented } from '../components/ui/RangeSegmented';
+import { ModelIconView } from '../components/ui/ModelIconView';
 import { formatTokensUi, formatCost } from '../common/utils/Formatter';
 import { formatDateTimeShort, parseIso } from '../common/utils/TimeUtil';
 import { SettingsStore } from '../data/SettingsStore';
@@ -29,6 +30,8 @@ export struct RecordsPage {
   @Watch('onSyncFinished') @StorageProp('syncFinishedVersion') syncFinishedVersion: number = 0;
   /** 模型汇总卡的筛选模型（'' = 全部模型；与「使用记录」的筛选互相独立）。 */
   @State summaryModel: string = '';
+  /** 当前主题是否深色：决定 gpt/grok/mimo 用彩色版图标（原版单色在深色下不可见）。 */
+  @State isDark: boolean = true;
   /** 数据版本号：每次重载完成 +1，作为 ForEach 键后缀强制列表行重建（避免复用旧闭包导致数值不刷新）。 */
   @State dataVersion: number = 0;
   private reloadRetried: boolean = false;
@@ -79,6 +82,9 @@ export struct RecordsPage {
   private async initCurrency(): Promise<void> {
     AppStorage.setOrCreate('currency', await SettingsStore.getCurrency());
     AppStorage.setOrCreate('usdCny', await OpenCodeApi.fetchUsdCny());
+    // 主题：决定模型图标用单色还是彩色版
+    const s = await SettingsStore.getAll();
+    this.isDark = s.theme !== 'light';
   }
 
   /** 「共 N 条」本地化：取模板后手动替换 {0}，避免个别版本 getStringSync 不执行占位符格式化。 */
@@ -212,16 +218,18 @@ export struct RecordsPage {
           .padding({ top: 14, bottom: 14 })
       } else {
         ForEach(this.filteredModelStats(), (m: ModelStat) => {
-          Column({ space: 3 }) {
-            Row() {
-              Text(m.model)
-                .fontSize(13)
-                .fontColor($r('app.color.text_primary'))
-                .layoutWeight(1)
-                .maxLines(1)
-                .textOverflow({ overflow: TextOverflow.Ellipsis })
-                .onClick(() => { this.toast(m.model); })
-              Text(formatCost(m.totalCostUsd, this.currency, this.usdCny) + this.costShare(m))
+            Column({ space: 3 }) {
+              Row() {
+                ModelIconView({ model: m.model, iconSize: 16, dark: this.isDark })
+                  .margin({ right: 6 })
+                Text(m.model)
+                  .fontSize(13)
+                  .fontColor($r('app.color.text_primary'))
+                  .layoutWeight(1)
+                  .maxLines(1)
+                  .textOverflow({ overflow: TextOverflow.Ellipsis })
+                  .onClick(() => { this.toast(m.model); })
+                Text(formatCost(m.totalCostUsd, this.currency, this.usdCny) + this.costShare(m))
                 .fontSize(13)
                 .fontWeight(FontWeight.Medium)
                 .fontColor($r('app.color.accent'))
@@ -465,6 +473,9 @@ export struct RecordsPage {
             // 首行 = 主信息（模型名占满 + 费用强调）；次行 = 次要信息（Key·时间 + 输入/输出）
             Column({ space: 3 }) {
               Row() {
+                // 模型图标：品牌 SVG，未知模型显示首字母徽章
+                ModelIconView({ model: r.model, iconSize: 16, dark: this.isDark })
+                  .margin({ right: 6 })
                 Text(r.model)
                   .fontSize(13)
                   .fontColor($r('app.color.text_primary'))
@@ -582,3 +593,4 @@ export struct RecordsPage {
     .height('100%')
   }
 }
+
