@@ -31,12 +31,26 @@ export default function modelIconTest() {
       expect(ModelIcon.keyOf('hunyuan-large')).assertEqual('hy');
     });
 
+    it('maps_claude_and_gemini', 0, () => {
+      expect(ModelIcon.keyOf('claude-haiku-5-5')).assertEqual('claude');
+      expect(ModelIcon.keyOf('claude-sonnet-4-5')).assertEqual('claude');
+      expect(ModelIcon.keyOf('anthropic-claude')).assertEqual('claude');
+      expect(ModelIcon.keyOf('gemini-3-pro')).assertEqual('gemini');
+      expect(ModelIcon.keyOf('googlegemini-2')).assertEqual('gemini');
+      expect(ModelIcon.resourceNameOf('claude-haiku-5-5', true)).assertEqual('model_claude');
+      expect(ModelIcon.resourceNameOf('gemini-3-pro', false)).assertEqual('model_gemini');
+      // 单色图标需按主题上色
+      expect(ModelIcon.needsTint('claude-haiku-5-5')).assertTrue();
+      expect(ModelIcon.needsTint('gemini-3-pro')).assertTrue();
+      expect(ModelIcon.needsTint('deepseek-v4.1-flash')).assertFalse();
+    });
+
     it('unknown_family_is_empty_not_deepseek', 0, () => {
       // 上游会错误地回退成 deepseek 图标，这里必须是「未知」
-      expect(ModelIcon.keyOf('claude-haiku-5-5')).assertEqual('');
+      expect(ModelIcon.keyOf('llama-4-scout')).assertEqual('');
       expect(ModelIcon.keyOf('longcat-2.5-preview-free')).assertEqual('');
-      expect(ModelIcon.keyOf('gemini-3-pro')).assertEqual('');
-      expect(ModelIcon.isKnown('claude-haiku-5-5')).assertFalse();
+      expect(ModelIcon.keyOf('mistral-large')).assertEqual('');
+      expect(ModelIcon.isKnown('llama-4-scout')).assertFalse();
       expect(ModelIcon.isKnown('deepseek-v4.1-flash')).assertTrue();
     });
 
@@ -50,8 +64,9 @@ export default function modelIconTest() {
       expect(ModelIcon.resourceNameOf('deepseek-v4.1-flash', true)).assertEqual('model_deepseek');
       expect(ModelIcon.resourceNameOf('deepseek-v4.1-flash', false)).assertEqual('model_deepseek');
       expect(ModelIcon.resourceNameOf('hy3', true)).assertEqual('model_hy');
-      // 未知模型没有资源名
-      expect(ModelIcon.resourceNameOf('claude-haiku-5-5', true)).assertEqual('');
+      // 未知模型没有资源名（走字母徽章）
+      expect(ModelIcon.resourceNameOf('llama-4-scout', true)).assertEqual('');
+      expect(ModelIcon.resourceNameOf('longcat-2.5-preview-free', true)).assertEqual('');
     });
 
     it('initials_badge_for_unknown_models', 0, () => {

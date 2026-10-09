@@ -18,22 +18,33 @@ export class ModelIcon {
 
   private static buildAlias(): Map<string, string> {
     const m = new Map<string, string>();
-    const brands: string[] = ['deepseek', 'glm', 'gpt', 'grok', 'kimi', 'meta', 'mimo', 'minimax', 'qwen', 'hy'];
+    const brands: string[] = ['deepseek', 'glm', 'gpt', 'grok', 'kimi', 'meta', 'mimo', 'minimax', 'qwen', 'hy',
+      'claude', 'gemini'];
     for (const b of brands) {
       m.set(b, b);
     }
     m.set('muse', 'meta');
+    m.set('anthropic', 'claude');
+    m.set('googlegemini', 'gemini');
+    m.set('google', 'gemini');
     return m;
   }
 
   private static buildRes(): Map<string, string> {
     const m = new Map<string, string>();
-    const brands: string[] = ['deepseek', 'glm', 'gpt', 'grok', 'kimi', 'meta', 'mimo', 'minimax', 'qwen', 'hy'];
+    const brands: string[] = ['deepseek', 'glm', 'gpt', 'grok', 'kimi', 'meta', 'mimo', 'minimax', 'qwen', 'hy',
+      'claude', 'gemini'];
     for (const b of brands) {
       m.set(b, `model_${b}`);
     }
     return m;
   }
+
+  /**
+   * 单色图标（自身不带颜色，SVG 无 fill 属性 → 默认黑，深色背景不可见）。
+   * 这些图标需要界面按主题设置 fillColor。
+   */
+  private static readonly MONO: string[] = ['claude', 'gemini'];
 
   /** 深色主题下需要换彩色版的键（原版是单色 logo）。 */
   private static readonly COLOR_VARIANTS: string[] = ['gpt', 'grok', 'mimo'];
@@ -70,6 +81,11 @@ export class ModelIcon {
   /** 是否已知品牌（未知时界面画字母徽章）。 */
   static isKnown(model: string): boolean {
     return ModelIcon.keyOf(model) !== '';
+  }
+
+  /** 该图标是否需要界面按主题上色（自身无颜色，否则深色背景不可见）。 */
+  static needsTint(model: string): boolean {
+    return ModelIcon.MONO.includes(ModelIcon.keyOf(model));
   }
 
   /** 图标资源名（含主题适配）；未知模型返回空串。 */
