@@ -55,6 +55,8 @@
     { "name": "model_usage", "value": "模型用量" },
     { "name": "model_summary", "value": "模型汇总" },
     { "name": "models_total", "value": "合计 {0} 个模型" },
+    { "name": "sync_running", "value": "同步正在进行中，请稍候…" },
+    { "name": "sync_failed", "value": "同步失败，请稍后重试" },
     { "name": "usage_trend", "value": "用量趋势" },
     { "name": "cost", "value": "成本" },
     { "name": "requests", "value": "请求" },

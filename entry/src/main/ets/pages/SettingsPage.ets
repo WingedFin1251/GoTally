@@ -72,7 +72,14 @@ export struct SettingsPage {
     this.loadVersion();
     const mgr = DataProvider.getSyncManager();
     // 以当前阶段为基线，避免进入页面时把旧消息误当作新完成事件
-    this.lastPhase = mgr.getProgress().phase;
+    const cur = mgr.getProgress();
+    this.lastPhase = cur.phase;
+    // 关键：进页面时同步当前进度，否则「同步进行中」时按钮仍显示可点，
+    // 点下去被 busy 拒绝又没有反馈 —— 用户会以为按钮坏了。
+    this.syncing = cur.running;
+    if (cur.message !== '') {
+      this.syncProgressMsg = cur.message;
+    }
     mgr.onProgress = (p: SyncProgress) => {
       this.syncing = p.running;
       this.syncProgressMsg = p.message;
@@ -83,6 +90,26 @@ export struct SettingsPage {
         }
       }
     };
+  }
+
+  /**
+   * 触发全量同步并**反馈结果**。
+   *
+   * 之前的写法是 `sync('full')` 直接丢弃返回值：同步已在跑时会被 busy 拒绝，
+   * 界面毫无反应（看起来像「按钮按不下去」）。这里补上提示，绝不静默。
+   */
+  private async startFullSync(): Promise<void> {
+    const mgr = DataProvider.getSyncManager();
+    if (this.syncing || mgr.getProgress().running) {
+      this.showToastSafe(this.str($r('app.string.sync_running').id, ''));
+      return;
+    }
+    const r = await mgr.sync('full');
+    if (r.ok !== true) {
+      const msg = r.error !== undefined && r.error !== '' ? r.error : this.str($r('app.string.sync_failed').id, '');
+      this.showToastSafe(msg);
+      this.syncProgressMsg = msg;
+    }
   }
 
   aboutToDisappear(): void {
@@ -231,7 +258,7 @@ export struct SettingsPage {
             Button(this.syncing ? $r('app.string.syncing') : (this.recordsUnavailable ? $r('app.string.refresh_now') : $r('app.string.start_full_sync')))
               .fontSize(12).height(30)
               .enabled(!this.syncing)
-              .onClick(() => { DataProvider.getSyncManager().sync('full'); })
+              .onClick(() => { this.startFullSync(); })
           }
         }
 

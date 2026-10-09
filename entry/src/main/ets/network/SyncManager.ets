@@ -40,6 +40,8 @@ export class SyncManager {
   private keyNameFetcher: ((workspaceId: string, token: string) => Promise<KeyNamePair[]>) | null;
   /** 最近一次「启动即刷新」的时间戳：避免页面频繁 onPageShow 造成重复刷新。 */
   private lastAutoKickMs: number = 0;
+  /** 本次同步开始时间：用于看门狗判断 busy 是否卡死。 */
+  private busySince: number = 0;
   onProgress: (p: SyncProgress) => void = () => {};
   /** 同步终止回调（成功/部分成功/失败均触发，且无论哪个页面在前台）：供应用外壳统一广播「数据已变更」。 */
   onFinished: (result: SyncResult) => void = () => {};
@@ -100,9 +102,16 @@ export class SyncManager {
       return { ok: false, error: '未登录' };
     }
     if (this.busy) {
-      return { ok: false, error: '已有同步任务进行中' };
+      // 看门狗：正常路径都会经 finish() 复位；万一异常路径漏了复位（写库抛错等），
+      // 超过 10 分钟视为卡死并强制重开，否则「同步」按钮会永远点不动。
+      if (Date.now() - this.busySince < 600000) {
+        return { ok: false, error: '已有同步任务进行中' };
+      }
+      console.error('sync: resetting stale busy flag after 10min');
+      this.busy = false;
     }
     this.busy = true;
+    this.busySince = Date.now();
     this.progress.mode = mode;
     this.progress.page = 0;
     this.progress.inserted = 0;
