@@ -363,11 +363,22 @@ export struct RecordsPage {
     return key === '—' ? t : `${key} · ${t}`;
   }
 
-  /** 会话次行左侧：Key 名称 · N 次请求。 */
+  /** 会话次行左侧：Key 名称 · N 次请求 · 最后使用时间（对齐上游会话表的「最后使用」列）。 */
   private sessionMeta(s: SessionStat): string {
     const key = this.keyLabel(s.keyName, s.keyId);
     const req = this.str($r('app.string.requests_count').id, `${s.requestCount}`);
-    return key === '—' ? req : `${key} · ${req}`;
+    const base = key === '—' ? req : `${key} · ${req}`;
+    const last = this.lastUsedText(s.lastAt);
+    return last === '' ? base : `${base} · ${this.str($r('app.string.last_used_short').id, last)}`;
+  }
+
+  /** 会话最后使用时间（短格式；解析失败时原样回显，空值返回空串）。 */
+  private lastUsedText(iso: string): string {
+    if (iso === '') {
+      return '';
+    }
+    const ms = parseIso(iso);
+    return ms > 0 ? formatDateTimeShort(ms) : iso;
   }
 
   /** 记录次行右侧：输入 / 输出 Token。 */

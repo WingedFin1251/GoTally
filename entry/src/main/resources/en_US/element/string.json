@@ -107,6 +107,8 @@
     { "name": "start_full_sync", "value": "Start Full Sync" },
     { "name": "set_appearance", "value": "Appearance" },
     { "name": "theme_desc", "value": "Manual light / dark when not following the system" },
+    { "name": "per_request", "value": "/req" },
+    { "name": "last_used_short", "value": "last {0}" },
     { "name": "theme_follow_system", "value": "Follow system" },
     { "name": "theme_follow_system_desc", "value": "Light/dark switches with the system setting" },
     { "name": "on", "value": "on" },

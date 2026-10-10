@@ -10,6 +10,7 @@ import consoleIntradayTest from './ConsoleIntraday.test';
 import consoleLogsTest from './ConsoleLogs.test';
 import modelIconTest from './ModelIcon.test';
 import themeUtilTest from './ThemeUtil.test';
+import exchangeRateTest from './ExchangeRate.test';
 
 export default function testsuite() {
   formatterTest();
@@ -24,4 +25,5 @@ export default function testsuite() {
   consoleLogsTest();
   modelIconTest();
   themeUtilTest();
+  exchangeRateTest();
 }

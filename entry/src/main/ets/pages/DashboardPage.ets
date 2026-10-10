@@ -3,8 +3,9 @@ import { DashboardViewModel } from './DashboardViewModel';
 import { StatCard } from '../components/ui/StatCard';
 import { RangeSegmented } from '../components/ui/RangeSegmented';
 import { QuotaProgress } from '../components/ui/QuotaProgress';
+import { SkeletonQuota, SkeletonStatCard, SkeletonChart } from '../components/ui/Skeleton';
 import { BarChart } from '../components/charts/BarChart';
-import { formatTokensUi, formatCost, formatPercent } from '../common/utils/Formatter';
+import { formatTokensUi, formatCost, formatCostFine, formatPercent } from '../common/utils/Formatter';
 import { formatReset } from '../common/utils/TimeUtil';
 import { isZh } from '../common/utils/Locale';
 import { Constants } from '../common/constants/Constants';
@@ -32,6 +33,8 @@ export struct DashboardPage {
   private scroller: Scroller = new Scroller();
   @Watch('onSyncFinished') @StorageProp('syncFinishedVersion') syncFinishedVersion: number = 0;
   private refreshRetried: boolean = false;
+  /** 首屏是否已加载完成：未完成时用骨架屏占位，避免一屏 0 值。 */
+  @State loaded: boolean = false;
   /** 滚动联动：向下滚隐藏悬浮导航栏、向上滚显示（由 Index 播放 HDS 滚动动画）。 */
   onNavChanged?: (hide: boolean) => void;
   private scrollHidden: boolean = false;
@@ -61,6 +64,7 @@ export struct DashboardPage {
     try {
       await this.vm.load();
       this.chartVersion++;
+      this.loaded = true;
     } catch (e) {
       // 首次加载失败（如 RDB 初始化竞争）时延迟重试一次，避免页面保持空白
       console.error('Dashboard load failed: ' + (e instanceof Error ? e.message : String(e)));
@@ -94,17 +98,44 @@ export struct DashboardPage {
         Text(this.sourceLabel(this.vm.quotaSource)).fontSize(11).fontColor($r('app.color.text_muted'))
       }
       .width('100%')
-      ForEach(this.vm.quota, (q: QuotaWindow) => {
-        QuotaProgress({
-          label: this.quotaLabel(q.label),
-          percent: q.used,
-          remainingText: `${q.remaining}%`,
-          resetText: formatReset(q.resetInSec, isZh()),
-          amountText: this.amountText(q),
-        })
-      }, (q: QuotaWindow) => q.label)
+      // 首屏未加载完：铺 3 块配额骨架，而不是 0% 进度条
+      if (!this.loaded && this.vm.quota.length === 0) {
+        SkeletonQuota()
+        SkeletonQuota()
+        SkeletonQuota()
+      } else {
+        ForEach(this.vm.quota, (q: QuotaWindow) => {
+          QuotaProgress({
+            label: this.quotaLabel(q.label),
+            percent: q.used,
+            remainingText: `${q.remaining}%`,
+            resetText: formatReset(q.resetInSec, isZh()),
+            amountText: this.amountText(q),
+          })
+        }, (q: QuotaWindow) => q.label)
+      }
     }
     .width('100%')
+  }
+
+  /** 每请求均费（上游把「均费」附在总费用格子里，这里同步对齐）。 */
+  private avgCostText(): string {
+    const req = this.vm.totals.requestCount;
+    const cost = this.vm.totals.totalCostUsd;
+    if (req <= 0 || cost <= 0) {
+      return '';
+    }
+    return `${formatCostFine(cost / req, this.currency, this.usdCny)}${this.res($r('app.string.per_request').id)}`;
+  }
+
+  /** 取字符串资源（无参）。 */
+  private res(id: number): string {
+    try {
+      const ctx = this.getUIContext().getHostContext();
+      return ctx === undefined ? '' : ctx.resourceManager.getStringSync(id);
+    } catch (e) {
+      return '';
+    }
   }
 
   private quotaLabel(label: string): string {
@@ -143,21 +174,40 @@ export struct DashboardPage {
       .width('100%')
 
       Column({ space: 10 }) {
-        Row({ space: 10 }) {
-          StatCard({ title: $r('app.string.ov_hit_rate'), value: formatPercent(this.vm.totals.hitRate), sub: '', accent: true }).layoutWeight(1)
-          StatCard({ title: $r('app.string.ov_hits'), value: formatTokensUi(this.vm.totals.cacheHitTokens), sub: '', accent: false }).layoutWeight(1)
+        // 首屏未加载完：6 格 KPI 骨架（与 StatCard 同尺寸，替换时不跳动）
+        if (!this.loaded && this.vm.totals.requestCount === 0) {
+          Row({ space: 10 }) {
+            SkeletonStatCard().layoutWeight(1)
+            SkeletonStatCard().layoutWeight(1)
+          }
+          .width('100%')
+          Row({ space: 10 }) {
+            SkeletonStatCard().layoutWeight(1)
+            SkeletonStatCard().layoutWeight(1)
+          }
+          .width('100%')
+          Row({ space: 10 }) {
+            SkeletonStatCard().layoutWeight(1)
+            SkeletonStatCard().layoutWeight(1)
+          }
+          .width('100%')
+        } else {
+          Row({ space: 10 }) {
+            StatCard({ title: $r('app.string.ov_hit_rate'), value: formatPercent(this.vm.totals.hitRate), sub: '', accent: true }).layoutWeight(1)
+            StatCard({ title: $r('app.string.ov_hits'), value: formatTokensUi(this.vm.totals.cacheHitTokens), sub: '', accent: false }).layoutWeight(1)
+          }
+          .width('100%')
+          Row({ space: 10 }) {
+            StatCard({ title: $r('app.string.ov_total_tokens'), value: formatTokensUi(this.vm.totals.totalInputTokens + this.vm.totals.totalOutputTokens + this.vm.totals.totalReasoningTokens), sub: '', accent: false }).layoutWeight(1)
+            StatCard({ title: $r('app.string.ov_requests'), value: `${this.vm.totals.requestCount}`, sub: '', accent: false }).layoutWeight(1)
+          }
+          .width('100%')
+          Row({ space: 10 }) {
+            StatCard({ title: $r('app.string.ov_cost'), value: formatCost(this.vm.totals.totalCostUsd, this.currency, this.usdCny), sub: this.avgCostText(), accent: false }).layoutWeight(1)
+            StatCard({ title: $r('app.string.ov_sessions'), value: `${this.vm.totals.sessionCount}`, sub: '', accent: false }).layoutWeight(1)
+          }
+          .width('100%')
         }
-        .width('100%')
-        Row({ space: 10 }) {
-          StatCard({ title: $r('app.string.ov_total_tokens'), value: formatTokensUi(this.vm.totals.totalInputTokens + this.vm.totals.totalOutputTokens + this.vm.totals.totalReasoningTokens), sub: '', accent: false }).layoutWeight(1)
-          StatCard({ title: $r('app.string.ov_requests'), value: `${this.vm.totals.requestCount}`, sub: '', accent: false }).layoutWeight(1)
-        }
-        .width('100%')
-        Row({ space: 10 }) {
-          StatCard({ title: $r('app.string.ov_cost'), value: formatCost(this.vm.totals.totalCostUsd, this.currency, this.usdCny), sub: '', accent: false }).layoutWeight(1)
-          StatCard({ title: $r('app.string.ov_sessions'), value: `${this.vm.totals.sessionCount}`, sub: '', accent: false }).layoutWeight(1)
-        }
-        .width('100%')
       }
       .width('100%')
     }
@@ -220,8 +270,10 @@ export struct DashboardPage {
       }
       .width('100%')
 
-      // 采样点不足时给说明，而不是一张空图
-      if (this.vm.trend.length === 0) {
+      // 采样点不足时给说明，而不是一张空图；首屏未加载完则铺图表遮罩
+      if (!this.loaded && this.vm.trend.length === 0) {
+        SkeletonChart({ blockHeight: 140 })
+      } else if (this.vm.trend.length === 0) {
         Text($r('app.string.today_trend_empty'))
           .fontSize(11)
           .fontColor($r('app.color.text_muted'))

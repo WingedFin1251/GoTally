@@ -2,6 +2,7 @@
 import { http } from '@kit.NetworkKit';
 import { Constants } from '../common/constants/Constants';
 import { WebCookies } from '../common/utils/WebCookies';
+import { ExchangeRate } from '../common/utils/ExchangeRate';
 import { ConsoleSnapshotStore } from '../data/ConsoleSnapshotStore';
 import type { QuotaWindow, QuotaResult, UsageRecord, WorkspaceRef } from '../model/UsageRecord';
 import type { KeyNamePair } from '../model/Stats';
@@ -842,7 +843,19 @@ export class OpenCodeApi {
     return OpenCodeApi.parseUsageResponse(text);
   }
 
+  /**
+   * USD→CNY 汇率（带 6 小时 TTL 缓存）。
+   *
+   * 命中缓存直接返回（各页面进入时不再各拉一次）；未命中才请求，
+   * 请求失败时优先复用旧缓存，最后才回退 `DEFAULT_USD_CNY`。
+   */
   static async fetchUsdCny(): Promise<number> {
+    const now = Date.now();
+    const cached = ExchangeRate.cached();
+    if (!ExchangeRate.shouldFetch(now)) {
+      return cached;
+    }
+    let fetched = 0;
     const req = http.createHttp();
     try {
       const resp = await req.request(Constants.EXCHANGE_URL, {
@@ -852,17 +865,18 @@ export class OpenCodeApi {
         readTimeout: 10000,
       });
       req.destroy();
-      if (resp.responseCode !== 200) {
-        return Constants.DEFAULT_USD_CNY;
+      if (resp.responseCode === 200) {
+        const data = JSON.parse(resp.result as string) as Record<string, Object>;
+        const rates = data['rates'] as Record<string, Object>;
+        fetched = Number(rates['CNY'] ?? 0);
       }
-      const data = JSON.parse(resp.result as string) as Record<string, Object>;
-      const rates = data['rates'] as Record<string, Object>;
-      const cny = Number(rates['CNY'] ?? 0);
-      return cny > 0 ? cny : Constants.DEFAULT_USD_CNY;
     } catch (e) {
       req.destroy();
-      return Constants.DEFAULT_USD_CNY;
     }
+    if (fetched > 0) {
+      ExchangeRate.store(fetched, now);
+    }
+    return ExchangeRate.pick(fetched, cached, Constants.DEFAULT_USD_CNY);
   }
 
   private static async fetchText(url: string, cookie: string, serverId: string, referer: string): Promise<string> {

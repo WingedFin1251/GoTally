@@ -50,6 +50,17 @@ export function formatCost(usd: number, currency: string, usdCny: number): strin
   return `$${usd.toFixed(4)}`;
 }
 
+/**
+ * 高精度金额（用于「每请求均费」这类小额指标）：
+ * < 1 保留 4 位小数（¥0.0154/次），≥ 1 保留 2 位（¥12.34）。
+ * 与 formatCost 的区别：CNY 小额不做 2 位四舍五入，避免 ¥0.0154 显示成 ¥0.02。
+ */
+export function formatCostFine(usd: number, currency: string, usdCny: number): string {
+  const v = currency === 'CNY' ? usd * usdCny : usd;
+  const symbol = currency === 'CNY' ? '¥' : '$';
+  return v >= 1 ? `${symbol}${v.toFixed(2)}` : `${symbol}${v.toFixed(4)}`;
+}
+
 /** 百分比：保留 1 位小数。 */
 export function formatPercent(p: number): string {
   return `${p.toFixed(1)}%`;

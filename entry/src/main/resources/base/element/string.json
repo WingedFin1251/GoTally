@@ -118,6 +118,8 @@
 
     { "name": "set_appearance", "value": "外观" },
     { "name": "theme_desc", "value": "不跟随时手动选择亮色 / 深色" },
+    { "name": "per_request", "value": "/次" },
+    { "name": "last_used_short", "value": "最后 {0}" },
     { "name": "theme_follow_system", "value": "跟随系统" },
     { "name": "theme_follow_system_desc", "value": "深色/浅色随系统设置自动切换" },
     { "name": "on", "value": "已开启" },

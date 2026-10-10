@@ -2,6 +2,7 @@
 import { StatsViewModel } from './StatsViewModel';
 import { StatCard } from '../components/ui/StatCard';
 import { RangeSegmented } from '../components/ui/RangeSegmented';
+import { SkeletonStatCard, SkeletonChart } from '../components/ui/Skeleton';
 import { ModelIconView } from '../components/ui/ModelIconView';
 import { DonutChart, DonutItem } from '../components/charts/DonutChart';
 import { LineChart, LineSeries } from '../components/charts/LineChart';
@@ -53,6 +54,8 @@ export struct StatsPage {
   @StorageProp('themeMode') themeMode: string = ThemeUtil.MODE_SYSTEM;
   @StorageProp('systemDark') systemDark: boolean = true;
   private refreshRetried: boolean = false;
+  /** 首屏是否已加载完成：未完成时用骨架屏占位。 */
+  @State loaded: boolean = false;
   /** 滚动联动：向下滚隐藏悬浮导航栏、向上滚显示（由 Index 播放 HDS 滚动动画）。 */
   onNavChanged?: (hide: boolean) => void;
   private scrollHidden: boolean = false;
@@ -96,6 +99,7 @@ export struct StatsPage {
         version: this.chart.version + 1,
       };
       this.chart = next;
+      this.loaded = true;
     } catch (e) {
       if (seq !== this.reqSeq) {
         return;
@@ -229,16 +233,30 @@ export struct StatsPage {
   KpiCards() {
     // Row/Column 两列布局（Grid 在 Scroll 内无高度会折叠）
     Column({ space: 10 }) {
-      Row({ space: 10 }) {
-        StatCard({ title: $r('app.string.total_input'), value: formatTokensUi(this.chart.totals.totalInputTokens), sub: '', accent: false }).layoutWeight(1)
-        StatCard({ title: $r('app.string.output'), value: formatTokensUi(this.chart.totals.totalOutputTokens), sub: '', accent: false }).layoutWeight(1)
+      // 首屏未加载完：4 格骨架
+      if (!this.loaded && this.chart.totals.requestCount === 0) {
+        Row({ space: 10 }) {
+          SkeletonStatCard().layoutWeight(1)
+          SkeletonStatCard().layoutWeight(1)
+        }
+        .width('100%')
+        Row({ space: 10 }) {
+          SkeletonStatCard().layoutWeight(1)
+          SkeletonStatCard().layoutWeight(1)
+        }
+        .width('100%')
+      } else {
+        Row({ space: 10 }) {
+          StatCard({ title: $r('app.string.total_input'), value: formatTokensUi(this.chart.totals.totalInputTokens), sub: '', accent: false }).layoutWeight(1)
+          StatCard({ title: $r('app.string.output'), value: formatTokensUi(this.chart.totals.totalOutputTokens), sub: '', accent: false }).layoutWeight(1)
+        }
+        .width('100%')
+        Row({ space: 10 }) {
+          StatCard({ title: $r('app.string.reasoning'), value: formatTokensUi(this.chart.totals.totalReasoningTokens), sub: '', accent: false }).layoutWeight(1)
+          StatCard({ title: $r('app.string.cost'), value: formatCost(this.chart.totals.totalCostUsd, this.currency, this.usdCny), sub: '', accent: true }).layoutWeight(1)
+        }
+        .width('100%')
       }
-      .width('100%')
-      Row({ space: 10 }) {
-        StatCard({ title: $r('app.string.reasoning'), value: formatTokensUi(this.chart.totals.totalReasoningTokens), sub: '', accent: false }).layoutWeight(1)
-        StatCard({ title: $r('app.string.cost'), value: formatCost(this.chart.totals.totalCostUsd, this.currency, this.usdCny), sub: '', accent: true }).layoutWeight(1)
-      }
-      .width('100%')
     }
     .width('100%')
   }
@@ -249,21 +267,40 @@ export struct StatsPage {
       Text($r('app.string.token_breakdown')).fontSize(15).fontWeight(FontWeight.Bold)
       // Row/Column 两列布局（Grid 在 Scroll 内无高度会折叠）
       Column({ space: 10 }) {
-        Row({ space: 10 }) {
-          StatCard({ title: $r('app.string.uncached_input'), value: formatTokensUi(this.chart.totals.uncachedInputTokens), sub: '', accent: false }).layoutWeight(1)
-          StatCard({ title: $r('app.string.output'), value: formatTokensUi(this.chart.totals.totalOutputTokens), sub: '', accent: false }).layoutWeight(1)
+        // 首屏未加载完：6 格骨架，避免一屏 0 值
+        if (!this.loaded && this.chart.totals.requestCount === 0) {
+          Row({ space: 10 }) {
+            SkeletonStatCard().layoutWeight(1)
+            SkeletonStatCard().layoutWeight(1)
+          }
+          .width('100%')
+          Row({ space: 10 }) {
+            SkeletonStatCard().layoutWeight(1)
+            SkeletonStatCard().layoutWeight(1)
+          }
+          .width('100%')
+          Row({ space: 10 }) {
+            SkeletonStatCard().layoutWeight(1)
+            SkeletonStatCard().layoutWeight(1)
+          }
+          .width('100%')
+        } else {
+          Row({ space: 10 }) {
+            StatCard({ title: $r('app.string.uncached_input'), value: formatTokensUi(this.chart.totals.uncachedInputTokens), sub: '', accent: false }).layoutWeight(1)
+            StatCard({ title: $r('app.string.output'), value: formatTokensUi(this.chart.totals.totalOutputTokens), sub: '', accent: false }).layoutWeight(1)
+          }
+          .width('100%')
+          Row({ space: 10 }) {
+            StatCard({ title: $r('app.string.reasoning'), value: formatTokensUi(this.chart.totals.totalReasoningTokens), sub: '', accent: false }).layoutWeight(1)
+            StatCard({ title: $r('app.string.cache_read'), value: formatTokensUi(this.chart.totals.cacheHitTokens), sub: '', accent: false }).layoutWeight(1)
+          }
+          .width('100%')
+          Row({ space: 10 }) {
+            StatCard({ title: $r('app.string.cache_write'), value: formatTokensUi(this.chart.totals.cacheWriteTokens), sub: '', accent: false }).layoutWeight(1)
+            StatCard({ title: $r('app.string.ov_sessions'), value: `${this.chart.totals.sessionCount}`, sub: '', accent: false }).layoutWeight(1)
+          }
+          .width('100%')
         }
-        .width('100%')
-        Row({ space: 10 }) {
-          StatCard({ title: $r('app.string.reasoning'), value: formatTokensUi(this.chart.totals.totalReasoningTokens), sub: '', accent: false }).layoutWeight(1)
-          StatCard({ title: $r('app.string.cache_read'), value: formatTokensUi(this.chart.totals.cacheHitTokens), sub: '', accent: false }).layoutWeight(1)
-        }
-        .width('100%')
-        Row({ space: 10 }) {
-          StatCard({ title: $r('app.string.cache_write'), value: formatTokensUi(this.chart.totals.cacheWriteTokens), sub: '', accent: false }).layoutWeight(1)
-          StatCard({ title: $r('app.string.ov_sessions'), value: `${this.chart.totals.sessionCount}`, sub: '', accent: false }).layoutWeight(1)
-        }
-        .width('100%')
       }
       .width('100%')
     }
