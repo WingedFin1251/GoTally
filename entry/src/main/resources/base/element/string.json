@@ -93,7 +93,8 @@
     { "name": "login_method_desc", "value": "内置浏览器打开官方授权页，自动回填" },
     { "name": "relogin", "value": "重新登录" },
     { "name": "logout", "value": "退出登录" },
-    { "name": "logout_desc", "value": "清除本地 token 与缓存数据" },
+    { "name": "logout_desc", "value": "清除本地 token、缓存数据与网页登录态" },
+    { "name": "logout_done", "value": "已退出登录并清除网页登录态" },
     { "name": "logged_in", "value": "已登录" },
     { "name": "not_logged_in", "value": "未登录" },
 

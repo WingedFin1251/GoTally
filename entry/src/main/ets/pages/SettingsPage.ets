@@ -9,6 +9,7 @@ import { SettingsCard } from '../components/ui/SettingsCard';
 import { formatDateTime, parseIso } from '../common/utils/TimeUtil';
 import { Constants } from '../common/constants/Constants';
 import { ThemeUtil } from '../common/utils/ThemeUtil';
+import { WebCookies } from '../common/utils/WebCookies';
 import { common } from '@kit.AbilityKit';
 import { pasteboard } from '@kit.BasicServicesKit';
 import { setLanguage } from '../common/utils/Locale';
@@ -529,8 +530,13 @@ export struct SettingsPage {
         secondaryButton: {
           value: $r('app.string.ok'), action: async () => {
             await DataProvider.getStore().clearAccount();
+            // 同时清掉 WebView 里的网页登录态：否则下次「重新登录」会直接复用旧会话
+            // （表现得像没点授权就"登录成功"），也就换不了账号。
+            WebCookies.clearAll();
+            WebCookies.clearWebStorage();
             AppStorage.setOrCreate('logoutVersion', (AppStorage.get('logoutVersion') as number ?? 0) + 1);
             this.load();
+            this.showToastSafe(this.str($r('app.string.logout_done').id, ''));
           },
         },
       });

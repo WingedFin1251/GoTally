@@ -64,6 +64,31 @@ export class WebCookies {
     return parts.join('; ');
   }
 
+  /**
+   * 清空 WebView 的 cookie 存储。
+   *
+   * 退出登录时调用：opencode 的会话 cookie 属于 HttpOnly 且保存在 WebView 里，
+   * 只清应用库里的 token 的话，下次「重新登录」会直接复用旧会话
+   * （表现为没点授权就"登录成功"），也就**无法切换账号**。
+   * 因此退出登录时一并清掉网页登录态，保证下次真的重走一遍授权。
+   */
+  static clearAll(): void {
+    try {
+      webview.WebCookieManager.clearAllCookiesSync();
+    } catch (e) {
+      console.error('WebCookies.clearAll failed: ' + (e instanceof Error ? e.message : String(e)));
+    }
+  }
+
+  /** 清空 WebView 的站点数据（localStorage / IndexedDB 等），与 clearAll 一起用于退出登录。 */
+  static clearWebStorage(): void {
+    try {
+      webview.WebStorage.deleteAllData();
+    } catch (e) {
+      console.error('WebCookies.clearWebStorage failed: ' + (e instanceof Error ? e.message : String(e)));
+    }
+  }
+
   /** 诊断用：返回某地址下可见的 cookie **名**列表（不含值，避免泄露凭据）。 */
   static names(url: string): string {
     const all = WebCookies.raw(url);
