@@ -5,6 +5,7 @@ import { OpenCodeApi } from '../network/OpenCodeApi';
 import { DataProvider } from '../data/DataProvider';
 import { Constants } from '../common/constants/Constants';
 import { WebCookies } from '../common/utils/WebCookies';
+import { LoginCredential } from '../common/utils/LoginCredential';
 
 const WORKSPACE_URL_RE: RegExp = /\/workspace\/(wrk_[A-Za-z0-9]+)/;
 
@@ -48,6 +49,10 @@ struct Login {
       if (!this.done && this.pollCount === 6) {
         this.hint = '若网页已显示登录成功，请点右上角「我已登录」';
       }
+      // 长时间停在 GitHub 授权页：明确提示要点绿色按钮（避免用户以为卡死）
+      if (!this.done && this.pollCount === 20 && LoginCredential.isGithubAuthorizePage(this.lastUrl)) {
+        this.hint = '请在 GitHub 页面点绿色 Authorize 按钮（本应用只认授权后回到 opencode 的登录态）';
+      }
       // 每 ~6s 打印一次 cookie 名快照（不含值），便于定位凭据抓取失败的原因
       if (!this.done && this.pollCount % 10 === 0) {
         console.error('login poll cookie names: ' + this.cookieDiagnostics());
@@ -84,32 +89,22 @@ struct Login {
   }
 
   /**
-   * 汇总候选地址下可见的全部 cookie，挑出可用作凭据的串。
+   * 汇总 opencode 域下可见的 cookie，判定是否拿到可用登录凭据。
    *
-   * 兼容性考虑：凭据命名/域名历史上是 opencode.ai 下的 `auth`，
-   * 现在可能落在 auth.opencode.ai 或改名为会话类 cookie，故：
-   *   ① 多地址汇总（opencode.ai + auth.opencode.ai）
-   *   ② 优先含 `auth=`，其次任意名字含 session 的 cookie
-   *   ③ 命中后**整串保留**（发送全部 cookie 更稳），而不是只留一个
+   * 修复要点（真机 bug）：**绝不探测当前页面地址**。
+   * 停在 `github.com/login/oauth/authorize` 时，当前页是 GitHub，
+   * 之前把它纳入探测范围会读到 GitHub 的 `user_session` 并被宽松的
+   * 「名字含 session」规则误判为已登录（还会把 GitHub cookie 存成凭据）。
+   * 现在只查 opencode 两个域 + **精确匹配**控制台会话 / 旧版 auth cookie 名。
    */
   private readCredential(): string {
-    // 同时带上「当前页面地址」：cookie 可能带 path 作用域（如 /auth、/workspace），只查根域名会漏
-    const all = WebCookies.readAll([this.lastUrl, Constants.OPENCODE_ORIGIN, Constants.AUTH_ORIGIN]);
-    if (all === '') {
-      return '';
+    // 同时带上「当前页面地址」：cookie 可能带 path 作用域（如 /auth、/workspace），
+    // 但仅当当前页确属 opencode 域时才纳入（否则会读到 GitHub 的 cookie）。
+    const urls: string[] = [Constants.OPENCODE_ORIGIN, Constants.AUTH_ORIGIN];
+    if (LoginCredential.isOpencodeHost(this.lastUrl)) {
+      urls.push(this.lastUrl);
     }
-    const parts = all.split(';');
-    let hasSessionLike = false;
-    for (const part of parts) {
-      const p = part.trim();
-      if (p.startsWith(`${Constants.AUTH_COOKIE_NAME}=`)) {
-        return all;
-      }
-      if (p.toLowerCase().includes('session')) {
-        hasSessionLike = true;
-      }
-    }
-    return hasSessionLike ? all : '';
+    return LoginCredential.pick(WebCookies.readAll(urls));
   }
 
   /** 诊断串：各候选地址下可见的 cookie 名（不含值），抓不到凭据时用于定位。 */
@@ -133,8 +128,25 @@ struct Login {
     if (this.done) {
       return;
     }
+    // ① 必须已回到 opencode 域：GitHub 授权页（URL 里含 opencode.ai 字样）不算数
+    if (!LoginCredential.isOpencodeHost(url)) {
+      if (LoginCredential.isGithubAuthorizePage(url) && this.hint === '') {
+        this.hint = '请在 GitHub 页面点绿色 Authorize 按钮完成授权';
+      }
+      return;
+    }
     const credential = this.readCredential();
     if (credential === '') {
+      return;
+    }
+    // ② 保存前探活：避免把无效凭据（如 GitHub cookie）当登录态存下来
+    const valid = await OpenCodeApi.validateConsoleCredential(credential);
+    if (this.done) {
+      return;
+    }
+    if (!valid) {
+      console.error('login credential rejected: ' + this.cookieDiagnostics());
+      this.hint = '尚未取到有效的 OpenCode 登录态，请完成授权后重试（右上角可手动确认）';
       return;
     }
     const m = WORKSPACE_URL_RE.exec(url);

@@ -844,6 +844,51 @@ export class OpenCodeApi {
   }
 
   /**
+   * 校验控制台凭据是否真的可用（保存前调用，避免把 GitHub 的 cookie 之类的垃圾当凭据存下来）。
+   *
+   * 用 `/console/api/orgs` 探活：该接口只需 cookie、不需要 `x-org-id`；
+   * 返回 200 且能解析出工作区数组即视为有效。
+   * 旧版 `auth=` 凭据走的是另一套接口，这里不做探活（直接放行）。
+   */
+  static async validateConsoleCredential(token: string): Promise<boolean> {
+    if (token.trim() === '' || token.includes('auth=')) {
+      return token.trim() !== '';
+    }
+    try {
+      const resp = await OpenCodeApi.consoleGet('/console/api/orgs', token);
+      if (resp === '') {
+        return false;
+      }
+      const json = JSON.parse(resp) as Object;
+      return Array.isArray(json);
+    } catch (e) {
+      console.error('validateConsoleCredential failed: ' + (e instanceof Error ? e.message : String(e)));
+      return false;
+    }
+  }
+
+  /** 控制台 GET（cookie 鉴权，不含 x-org-id）；失败/非 200 返回空串。 */
+  private static async consoleGet(path: string, token: string): Promise<string> {
+    const req = http.createHttp();
+    try {
+      const resp = await req.request(`${Constants.OPENCODE_ORIGIN}${path}`, {
+        method: http.RequestMethod.GET,
+        header: OpenCodeApi.consoleHeaders(token, ''),
+        connectTimeout: 10000,
+        readTimeout: 10000,
+      });
+      req.destroy();
+      if (resp.responseCode !== 200) {
+        return '';
+      }
+      return resp.result as string;
+    } catch (e) {
+      req.destroy();
+      return '';
+    }
+  }
+
+  /**
    * USD→CNY 汇率（带 6 小时 TTL 缓存）。
    *
    * 命中缓存直接返回（各页面进入时不再各拉一次）；未命中才请求，

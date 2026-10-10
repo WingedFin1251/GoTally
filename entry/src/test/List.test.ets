@@ -11,6 +11,7 @@ import consoleLogsTest from './ConsoleLogs.test';
 import modelIconTest from './ModelIcon.test';
 import themeUtilTest from './ThemeUtil.test';
 import exchangeRateTest from './ExchangeRate.test';
+import loginCredentialTest from './LoginCredential.test';
 
 export default function testsuite() {
   formatterTest();
@@ -26,4 +27,5 @@ export default function testsuite() {
   modelIconTest();
   themeUtilTest();
   exchangeRateTest();
+  loginCredentialTest();
 }
